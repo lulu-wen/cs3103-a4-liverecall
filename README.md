@@ -1,17 +1,39 @@
-# CS3103 Assignment 4 - LiveRecall
+# LiveRecall - CS3103 Assignment 4
 
-Group project repository for the CS3103 Assignment 4 LiveRecall mini-project.
+LiveRecall is a classroom caption application: follow live subtitles, review
+recent context with **What did I miss?**, and recover missed captions after reconnecting.
+
+## Architecture
+
+```text
+caption_source.py -> solution_server.py -> browser clients
+```
+
+- **Caption source:** the supplied deterministic generator produces revisions.
+- **Server:** distributes captions and will manage revision state, recent history
+  and recovery.
+- **Browser:** displays captions and will provide local recall and auto-reconnect.
+- **Delivery package:** bounded per-client queues, senders, cleanup and monitoring.
 
 ## Current status
 
-This repository currently contains the supplied starter kit, a working naive
-baseline rather than a completed assignment solution. Begin with
-[START_HERE.md](START_HERE.md) and [DEMO_GUIDE.md](DEMO_GUIDE.md).
+- Server/browser still use the naive starter behavior.
+- `delivery/` is independently tested but not connected to the server yet.
+- Local tests pass; Ubuntu public performance results are pending.
+- Track required work in the [project checklist](docs/project_checklist.md).
 
-The assignment handout PDF is intentionally excluded from version control.
-The team's final `report.pdf` is still a required submission deliverable.
+## Project layout
 
-## Ubuntu quick start
+```text
+solution_server.py   Required server entry point
+caption_source.py    Deterministic caption source
+client/              Browser UI
+delivery/            Per-client delivery modules
+tests/               Component/integration tests
+docs/delivery/       Delivery design, test plan and drafts
+```
+
+## Ubuntu setup
 
 ```bash
 sudo apt update
@@ -20,33 +42,48 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 python submission_check.py
-python solution_server.py --port 8765
 ```
 
-See [DEMO_GUIDE.md](DEMO_GUIDE.md) for the browser and deterministic caption
-source workflow, and [PUBLIC_TESTS.md](PUBLIC_TESTS.md) for public experiments.
+See [START_HERE.md](START_HERE.md) and [UBUNTU_SETUP.md](UBUNTU_SETUP.md) for details.
 
-## Final submission checklist
+## Run the starter demo
 
-- Keep `solution_server.py`, `requirements.txt`, and browser files under `client/`.
-- Complete this README with exact Ubuntu setup, server/browser instructions,
-  public test commands and configuration, and design notes; use
-  [README_TEMPLATE.md](README_TEMPLATE.md) as a guide.
-- Create `AI_USAGE.md` from [AI_USAGE_TEMPLATE.md](AI_USAGE_TEMPLATE.md), including
-  critical evaluation of at least one rejected or modified AI suggestion.
-- Create `CONTRIBUTIONS.md` from
-  [CONTRIBUTIONS_TEMPLATE.md](CONTRIBUTIONS_TEMPLATE.md), with named responsibilities
-  and agreed contribution percentages.
-- Add `report.pdf`: 4-5 pages excluding references and appendices. Cover architecture,
-  protocol, revision/recovery semantics, backpressure/overload policy, experiments,
-  at least one before/after optimization comparison, latency/freshness/completeness
-  results, failures, trade-offs, limitations, and future work.
-- Run T1-T5 in Ubuntu at least three times each and report median results.
-- Submit the compulsory 5-7 minute deterministic application demo video separately.
-- Run `python submission_check.py --final`; this is a compatibility check, not a
-  full correctness or performance test.
-- Submit one group ZIP or repository URL to Canvas
-  `miniProject-Assignment4-submission` by 4 November 2026.
+Run in separate terminals from the repository root. Activate the virtual
+environment in each terminal that runs the server or source.
 
-Use the group repository throughout development to retain contribution history.
-Do not include generated virtual environments or model weights without approval.
+```bash
+# Server
+python solution_server.py --port 8765
+
+# Browser files: open http://127.0.0.1:8000
+python -m http.server 8000 --directory client
+
+# Caption source
+python caption_source.py --duration 120
+```
+
+The starter is incomplete; see [DEMO_GUIDE.md](DEMO_GUIDE.md) for the final demo behavior.
+
+## Tests
+
+```bash
+# Independent delivery checks; standard library only
+python -m unittest discover -s tests -v
+
+# Public run; uses the current server
+python run_demo.py --clients 20 --duration 20 --runs 3 --output-stem t1
+```
+
+- Independent tests use controlled peers, not real networking benchmarks.
+- Run mandatory public experiments in Ubuntu: [PUBLIC_TESTS.md](PUBLIC_TESTS.md).
+- See the [delivery test plan](docs/delivery/delivery_test_plan.md) for remaining checks.
+
+## Documentation
+
+- [Project checklist](docs/project_checklist.md): spec requirements and status.
+- [Delivery guide](docs/delivery/client_delivery.md): modules, lifecycle and monitoring.
+- [Report draft](docs/delivery/buffering_report_draft.md): design and evidence gaps.
+- [Submission drafts](docs/delivery/delivery_submission_drafts.md): AI usage and contributions.
+
+The assignment handout PDF is excluded from Git. The team's final `report.pdf`
+is still required.
