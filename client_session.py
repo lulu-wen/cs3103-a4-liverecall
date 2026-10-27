@@ -7,6 +7,7 @@ import logging
 import math
 from typing import MutableMapping, Protocol
 
+from client_monitor import ClientMonitor
 from client_queue import ClientQueue
 from client_sender import ClientConnection, run_client_sender
 
@@ -25,6 +26,7 @@ async def run_client_session(
     *,
     send_timeout: float = 10.0,
     close_timeout: float = 3.0,
+    monitor: ClientMonitor | None = None,
 ) -> None:
     """Register a client and supervise its sender until disconnect or failure.
 
@@ -50,7 +52,10 @@ async def run_client_session(
 
     clients[ws] = queue
     sender = asyncio.create_task(
-        run_client_sender(ws, queue, send_timeout=send_timeout, close_timeout=close_timeout),
+        run_client_sender(
+            ws, queue, send_timeout=send_timeout, close_timeout=close_timeout,
+            monitor=monitor,
+        ),
         name="client-sender",
     )
     disconnected = asyncio.create_task(ws.wait_closed(), name="client-disconnect")

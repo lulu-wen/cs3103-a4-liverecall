@@ -7,6 +7,7 @@ import logging
 import math
 from typing import Protocol
 
+from client_monitor import ClientMonitor
 from client_queue import ClientQueue, QueueClosed
 
 
@@ -27,6 +28,7 @@ async def run_client_sender(
     *,
     send_timeout: float = 10.0,
     close_timeout: float = 3.0,
+    monitor: ClientMonitor | None = None,
 ) -> None:
     """Consume one client's queue and send payloads sequentially.
 
@@ -54,12 +56,23 @@ async def run_client_sender(
                 payload = await queue.get()
             except QueueClosed:
                 return
+            outcome = "error"
+            if monitor is not None:
+                monitor.send_started(payload)
             try:
                 await asyncio.wait_for(ws.send(payload), timeout=send_timeout)
+                outcome = "sent"
             except asyncio.TimeoutError:
+                outcome = "timeout"
                 close_code = 1013
                 close_reason = "Send deadline exceeded"
                 raise
+            except asyncio.CancelledError:
+                outcome = "cancelled"
+                raise
+            finally:
+                if monitor is not None:
+                    monitor.send_finished(outcome)
             # get()/send() may both complete without yielding. Let receivers,
             # other senders, and timeout callbacks run even with a full queue.
             await asyncio.sleep(0)
