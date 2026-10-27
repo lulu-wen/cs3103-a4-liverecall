@@ -7,30 +7,42 @@ standard library and support Python 3.10+.
 
 ## Connection lifecycle
 
-The future client handler should create one queue and exactly one sender task
-for each connection. Keep a reference to both in the client registry.
+`client_session.py` now provides `run_client_session()` to register a queue,
+start exactly one sender, and supervise connection shutdown. The future client
+handler creates a queue and passes ownership to this function:
 
 ```python
-queue = ClientQueue(max_messages=256, max_bytes=1024 * 1024)
-sender = asyncio.create_task(run_client_sender(ws, queue))
-try:
-    # P2 enqueues HISTORY before registering the client for live updates.
-    # The source handler subsequently calls queue.push(serialized_message).
-    await ws.wait_closed()
-finally:
-    # Remove the client from the registry here before releasing its resources.
-    queue.close()
-    sender.cancel()
-    try:
-        await sender
-    except asyncio.CancelledError:
-        pass
-    # Handle/log send errors here according to the handler's error policy.
+from client_queue import ClientQueue, PushResult
+from client_session import run_client_session
+
+# Server-owned registry shared with the future producer/broadcast code.
+clients = {}
+
+async def client_handler(ws, serialized_history):
+    queue = ClientQueue(max_messages=256, max_bytes=1024 * 1024)
+    # P2 supplies the history, before live registration.
+    if queue.push(serialized_history) is not PushResult.ACCEPTED:
+        queue.close()
+        await ws.close(code=1013, reason="Initial history exceeds queue capacity")
+        return
+    await run_client_session(ws, queue, clients)
+    # Send failures propagate here; handle/log them at the handler boundary.
 ```
 
 This is an integration outline, not a complete handler. P2 must coordinate
 history construction and client registration to avoid missing live updates.
 Capacity values are examples, not chosen evaluation parameters.
+
+The session waits for either connection close or sender completion. Every exit
+path removes its own registry entry before awaiting cleanup, closes the queue,
+cancels and awaits the sender/connection waiter, and attempts connection close.
+It also handles handler cancellation (including repeated cancellation during
+cleanup). A replacement registry entry is not removed by the older session.
+Duplicate registrations and closed queues are rejected before ownership transfer.
+
+Calling an async function does not start it: the caller owns resources until
+`run_client_session()` starts executing. If a newly created session task is
+cancelled before ever starting, its caller must close the connection/queue.
 
 ## Behavior and responsibilities
 
@@ -59,5 +71,9 @@ python -m unittest discover -s tests -v
 
 Sender tests use controlled fake connections to check FIFO, slow-client
 isolation, send deadlines, failures, cancellation, and cleanup deadlines.
+Session tests cover registry removal, blocked-send cancellation, empty queues,
+queue close, sender failures/timeouts, repeated cancellation, stuck close,
+replacement/duplicate registrations, and 25 simultaneous disconnects. They check
+that no child tasks are left running after each completed session test.
 These do not replace a real WebSocket integration test or Ubuntu T3 runs.
 The starter server has not yet been wired to these modules.
