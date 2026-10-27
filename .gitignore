@@ -1,0 +1,20 @@
+# Assignment handout (the team's required report.pdf remains trackable).
+/miniProject_Assignment4_LiveRecall_System.pdf
+
+# Local tools and Python environments.
+/tmp/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local configuration and editor files.
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
