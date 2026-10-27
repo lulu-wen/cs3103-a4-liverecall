@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import patch
 
-from client_queue import ClientQueue, PushResult, QueueClosed
+from delivery.client_queue import ClientQueue, PushResult, QueueClosed
 
 
 class ClientQueueTests(unittest.IsolatedAsyncioTestCase):
@@ -82,7 +82,7 @@ class ClientQueueTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_oldest_age_tracks_next_pending_message(self):
         queue = ClientQueue(max_messages=2, max_bytes=10)
-        with patch("client_queue.monotonic", side_effect=[10.0, 12.0, 15.0, 16.0]):
+        with patch("delivery.client_queue.monotonic", side_effect=[10.0, 12.0, 15.0, 16.0]):
             queue.push("a")
             queue.push("b")
             self.assertEqual(queue.stats().oldest_pending_seconds, 5.0)

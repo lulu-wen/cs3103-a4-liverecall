@@ -1,8 +1,8 @@
 import asyncio
 import unittest
 
-from client_queue import ClientQueue, PushResult
-from client_session import run_client_session
+from delivery.client_queue import ClientQueue, PushResult
+from delivery.client_session import run_client_session
 
 
 class FakeConnection:

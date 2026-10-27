@@ -1,4 +1,4 @@
-"""Bounded FIFO for one client's outgoing WebSocket messages.
+"""Server-side bounded FIFO for one client's outgoing WebSocket messages.
 
 Use on one asyncio event loop, with one consumer (sender task) per queue.
 This module does not interpret captions or decide overload policy. The caller

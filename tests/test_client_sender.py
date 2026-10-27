@@ -1,8 +1,8 @@
 import asyncio
 import unittest
 
-from client_queue import ClientQueue
-from client_sender import run_client_sender
+from delivery.client_queue import ClientQueue
+from delivery.client_sender import run_client_sender
 
 
 class FakeConnection:
@@ -120,7 +120,7 @@ class ClientSenderTests(unittest.IsolatedAsyncioTestCase):
         queue = self.queue()
         queue.push("message")
         task = self.start_sender(ws, queue, close_timeout=0.02)
-        with self.assertLogs("client_sender", level="WARNING"):
+        with self.assertLogs("delivery.client_sender", level="WARNING"):
             with self.assertRaisesRegex(OSError, "send failed"):
                 await asyncio.wait_for(task, 1)
         self.assertTrue(queue.stats().closed)

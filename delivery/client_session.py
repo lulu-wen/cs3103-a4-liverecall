@@ -7,9 +7,9 @@ import logging
 import math
 from typing import MutableMapping, Protocol
 
-from client_monitor import ClientMonitor
-from client_queue import ClientQueue
-from client_sender import ClientConnection, run_client_sender
+from .client_monitor import ClientMonitor
+from .client_queue import ClientQueue
+from .client_sender import ClientConnection, run_client_sender
 
 
 logger = logging.getLogger(__name__)

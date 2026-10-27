@@ -4,10 +4,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from client_monitor import ClientMonitor
-from client_queue import ClientQueue
-from client_sender import run_client_sender
-from client_session import run_client_session
+from delivery.client_monitor import ClientMonitor
+from delivery.client_queue import ClientQueue
+from delivery.client_sender import run_client_sender
+from delivery.client_session import run_client_session
 
 
 class FakeConnection:
@@ -82,7 +82,7 @@ class ClientMonitorTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_monotonic_timing_and_utf8_payload_accounting(self):
         ws = FakeConnection()
-        with patch("client_monitor.monotonic", side_effect=[10.0, 12.0, 13.0]):
+        with patch("delivery.client_monitor.monotonic", side_effect=[10.0, 12.0, 13.0]):
             self.monitor.send_started("\u4f60")
             during = self.monitor.snapshot(self.queue, ws)
             self.assertEqual(during.in_flight_seconds, 2.0)

@@ -7,8 +7,8 @@ import logging
 import math
 from typing import Protocol
 
-from client_monitor import ClientMonitor
-from client_queue import ClientQueue, QueueClosed
+from .client_monitor import ClientMonitor
+from .client_queue import ClientQueue, QueueClosed
 
 
 logger = logging.getLogger(__name__)
