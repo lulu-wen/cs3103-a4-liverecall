@@ -56,8 +56,9 @@ that exists only in the starter or in independently tested modules.
 
 ## Bounded delivery under stress (sections 3, 4.3 and 10)
 
-- [ ] Integrate bounded per-client buffering and slow-client isolation into
-  `solution_server.py`; standalone module tests do not complete this requirement.
+- [x] Connect bounded per-client queues, senders, cleanup and monitoring to
+  `solution_server.py`; local WebSocket checks pass. Formal Ubuntu isolation
+  and memory validation remain pending under the stress requirements below.
 - [ ] Handle slow readers and constrained bandwidth without indefinitely queuing
   every revision; preserve finals and the latest useful active state.
 - [ ] Converge promptly to current useful state after overload or disconnection
@@ -159,8 +160,9 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 
 - [x] Implement and independently test bounded queue, sender, lifecycle cleanup
   and monitoring modules in `delivery/`.
-- [x] Pass the 38 local component/integration tests, including 100 controlled
-  connections with ten blocked senders. These are not Ubuntu public-test results.
+- [x] Pass 45 local component/integration tests, including 100 controlled
+  connections with ten blocked senders and real loopback server tests.
+  These are not Ubuntu public-test results.
 - [ ] Run `python submission_check.py --final` on the final Ubuntu submission;
   this checks compatibility, not full correctness/performance.
 

@@ -23,6 +23,7 @@ async def run_client_session(
     ws: SessionConnection,
     queue: ClientQueue,
     clients: MutableMapping[SessionConnection, ClientQueue],
+    # Parameters after * require names, e.g. send_timeout=10.
     *,
     send_timeout: float = 10.0,
     close_timeout: float = 3.0,
@@ -50,7 +51,8 @@ async def run_client_session(
                 or not math.isfinite(value) or value <= 0):
             raise ValueError(f"{name} must be a positive finite number")
 
-    clients[ws] = queue
+    clients[ws] = queue  # Make this queue available to the broadcaster.
+    # The session creates and owns both tasks; the server does not supply their results.
     sender = asyncio.create_task(
         run_client_sender(
             ws, queue, send_timeout=send_timeout, close_timeout=close_timeout,
@@ -58,21 +60,23 @@ async def run_client_session(
         ),
         name="client-sender",
     )
+    # wait_closed() observes closure; it does not initiate it.
     disconnected = asyncio.create_task(ws.wait_closed(), name="client-disconnect")
-    failure: BaseException | None = None
+    failure: BaseException | None = None  # Preserve the original error during cleanup.
     try:
+        # Either task finishing starts teardown; wait does not cancel the other task.
         done, _ = await asyncio.wait(
             (sender, disconnected), return_when=asyncio.FIRST_COMPLETED
         )
         for task in (sender, disconnected):
             if task in done:
-                task.result()  # Propagate sender/connection errors after cleanup.
+                # Read only finished tasks; result() re-raises errors or cancellation.
+                task.result()
     except BaseException as exc:
         failure = exc
-        raise
+        raise  # The finally block runs before this error reaches the server.
     finally:
-        # Stop new broadcasts before yielding during cleanup. Identity protects
-        # a replacement registry entry from deletion by an older session.
+        # Unregister before awaiting cleanup; identity protects a replacement queue.
         if clients.get(ws) is queue:
             del clients[ws]
         queue.close()
@@ -80,11 +84,11 @@ async def run_client_session(
         async def cleanup() -> None:
             for task in (sender, disconnected):
                 if not task.done():
-                    task.cancel()
+                    task.cancel()  # Request cancellation; still await actual completion.
+            # Await both tasks and collect errors so one failure cannot interrupt teardown.
             results = await asyncio.gather(sender, disconnected, return_exceptions=True)
-            # Always request close, including when sender was cancelled before
-            # its coroutine started (so its finally block never ran). WebSocket
-            # close is idempotent; this can also retry failed sender cleanup.
+            # Ensure closure even if the sender was cancelled before its finally could run.
+            # Repeated close calls are safe; 1000 means normal closure.
             try:
                 await asyncio.wait_for(
                     ws.close(code=1000, reason="Client session ended"),
@@ -100,8 +104,7 @@ async def run_client_session(
                         raise result
                     logger.warning("Additional client task failure: %r", result)
 
-        # Shield cleanup from repeated handler cancellation. Keep a strong task
-        # reference and await it: no background cleanup is left behind.
+        # Shield cleanup from repeated cancellation, but still await it before returning.
         cleanup_task = asyncio.create_task(cleanup(), name="client-cleanup")
         cancelled_during_cleanup = False
         while not cleanup_task.done():

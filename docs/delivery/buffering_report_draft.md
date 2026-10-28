@@ -1,6 +1,7 @@
 # Report draft: buffering and slow-client isolation
 
-Notes for the shared report. Server integration and Ubuntu results are pending.
+Notes for the shared report. Basic delivery wiring is in place; semantic
+overload/recovery integration and Ubuntu results are pending.
 
 ## Design
 
@@ -13,6 +14,8 @@ Notes for the shared report. Server integration and Ubuntu results are pending.
 
 - Admission checks message count and encoded payload bytes.
 - A full queue rejects new data without silently evicting old messages.
+- The current server unregisters and closes that client with code 1013. This
+  temporary fallback cannot guarantee final delivery without semantic recovery.
 - Rejection is not delivery: overload handling must preserve finals and the
   latest useful active state, using recovery where appropriate.
 - Limits exclude object overhead, the current send, transport and OS buffers.
@@ -29,11 +32,13 @@ Notes for the shared report. Server integration and Ubuntu results are pending.
 
 ## Evidence and remaining work
 
-- All 38 local tests passed on 27 October 2026.
+- All 45 local tests passed on 27 October 2026, including real loopback WebSockets.
 - With 100 controlled peers and ten blocked sends, normal senders continue;
   slow queues reject at their limits and accepted data drains in order later.
 - Tests check registry/task cleanup and isolation of a failed session.
-- Real WebSocket behavior, Ubuntu T3, RSS trends and baseline comparison remain
-  unmeasured. Add those results before making performance claims.
+- A local 20-client smoke check delivered 80/80 finals and 240/240 revisions;
+  this single short Windows run is not a formal public performance result.
+- Ubuntu T3, RSS trends and baseline comparison remain unmeasured. Add those
+  results before making performance claims.
 
 Use the [experiment plan](delivery_test_plan.md) to collect missing evidence.

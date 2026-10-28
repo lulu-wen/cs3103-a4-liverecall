@@ -60,6 +60,7 @@ class ClientMonitor:
             raise RuntimeError("No send is in flight")
         self._last_send_seconds = monotonic() - self._started_at
         if outcome == "sent":
+            # Count local send completions and payload bytes, not peer acknowledgements.
             self._sent_messages += 1
             self._sent_payload_bytes += self._in_flight_bytes
         elif outcome == "error":
@@ -76,6 +77,7 @@ class ClientMonitor:
         the OS TCP buffer or total memory usage. None means unavailable, which
         must not be interpreted as an empty buffer.
         """
+        # Read the transport output buffer, not our queue or bytes in the network.
         transport = getattr(ws, "transport", None)
         get_size = getattr(transport, "get_write_buffer_size", None)
         write_buffer_bytes = None
@@ -88,8 +90,10 @@ class ClientMonitor:
                 if isinstance(size, int) and not isinstance(size, bool) and size >= 0:
                     write_buffer_bytes = size
         age = 0.0 if self._started_at is None else monotonic() - self._started_at
+        # Keep queued data, the current send and cumulative counters separate.
         return DeliveryStats(
             queue=queue.stats(),
+            # In-flight means send is unfinished; bytes are its full payload, not bytes left.
             in_flight=self._started_at is not None,
             in_flight_bytes=self._in_flight_bytes,
             in_flight_seconds=age,
