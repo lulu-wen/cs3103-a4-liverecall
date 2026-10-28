@@ -17,8 +17,11 @@ caption_source.py -> solution_server.py -> browser clients
 
 ## Current status
 
-- Server/browser still use the naive starter behavior.
-- `delivery/` is independently tested but not connected to the server yet.
+- The server now uses bounded per-client queues, senders, cleanup and monitoring.
+- The browser still uses the naive starter behavior. Revision state, real history
+  recovery and semantic overload handling remain to integrate.
+- A rejected queue push temporarily closes that client with code 1013; this
+  fallback does not guarantee delivery/recovery of finals under overload.
 - Local tests pass; Ubuntu public performance results are pending.
 - Track required work in the [project checklist](docs/project_checklist.md).
 
@@ -46,7 +49,7 @@ python submission_check.py
 
 See [START_HERE.md](START_HERE.md) and [UBUNTU_SETUP.md](UBUNTU_SETUP.md) for details.
 
-## Run the starter demo
+## Run the application
 
 Run in separate terminals from the repository root. Activate the virtual
 environment in each terminal that runs the server or source.
@@ -62,19 +65,20 @@ python -m http.server 8000 --directory client
 python caption_source.py --duration 120
 ```
 
-The starter is incomplete; see [DEMO_GUIDE.md](DEMO_GUIDE.md) for the final demo behavior.
+The application is incomplete; see [DEMO_GUIDE.md](DEMO_GUIDE.md) for the final demo behavior.
 
 ## Tests
 
 ```bash
-# Independent delivery checks; standard library only
+# Component and real WebSocket checks; install requirements.txt first
 python -m unittest discover -s tests -v
 
 # Public run; uses the current server
 python run_demo.py --clients 20 --duration 20 --runs 3 --output-stem t1
 ```
 
-- Independent tests use controlled peers, not real networking benchmarks.
+- Component tests use controlled peers; server tests also use loopback WebSockets.
+- Neither replaces the required Ubuntu networking benchmarks.
 - Run mandatory public experiments in Ubuntu: [PUBLIC_TESTS.md](PUBLIC_TESTS.md).
 - See the [delivery test plan](docs/delivery/delivery_test_plan.md) for remaining checks.
 

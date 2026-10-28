@@ -53,6 +53,7 @@ async def run_client_sender(
     try:
         while True:
             try:
+                # Wait when empty; send timing starts only after a payload is dequeued.
                 payload = await queue.get()
             except QueueClosed:
                 return
@@ -60,6 +61,7 @@ async def run_client_sender(
             if monitor is not None:
                 monitor.send_started(payload)
             try:
+                # Limit this send attempt, excluding time already spent in the queue.
                 await asyncio.wait_for(ws.send(payload), timeout=send_timeout)
                 outcome = "sent"
             except asyncio.TimeoutError:
@@ -73,8 +75,7 @@ async def run_client_sender(
             finally:
                 if monitor is not None:
                     monitor.send_finished(outcome)
-            # get()/send() may both complete without yielding. Let receivers,
-            # other senders, and timeout callbacks run even with a full queue.
+            # Yield execution without a fixed delay or rate limit.
             await asyncio.sleep(0)
     except asyncio.CancelledError:
         close_reason = "Sender cancelled"
@@ -85,9 +86,9 @@ async def run_client_sender(
             close_reason = "Send failed"
         raise
     finally:
+        # Abort queued delivery before awaiting socket close; this does not drain the queue.
         queue.close()
-        # A cancelled/timed-out send must not be followed by another send on
-        # this connection. Close it, bounding the closing handshake as well.
+        # Initiate socket closure and bound the wait for the closing handshake.
         try:
             await asyncio.wait_for(
                 ws.close(code=close_code, reason=close_reason), timeout=close_timeout

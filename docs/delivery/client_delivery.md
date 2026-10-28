@@ -1,7 +1,8 @@
 # Per-client delivery
 
 Each client has its own queue and sender. A slow send can wait without blocking
-other senders. The modules are tested independently; server integration is pending.
+other senders. `solution_server.py` now uses these modules; revision/recovery and
+semantic overload behavior are still incomplete.
 
 ## Modules
 
@@ -16,8 +17,8 @@ other senders. The modules are tested independently; server integration is pendi
 
 | Spec | Support and remaining work |
 | --- | --- |
-| Section 3, #9: Concurrent clients | Separate queues/tasks; real-network testing pending |
-| Section 3, #10: Slow-client isolation | Bounded queues and independent sends; server integration pending |
+| Section 3, #9: Concurrent clients | Separate queues/tasks; local WebSocket checks pass; Ubuntu scale tests pending |
+| Section 3, #10: Slow-client isolation | Integrated bounded queues and independent sends; Ubuntu stress tests pending |
 | Section 3, #11 and section 4.3: Graceful overload | Admission results and monitoring; semantic overload policy pending |
 | Section 8, T3: Slow clients | Local tests ready; Ubuntu measurements pending |
 | Section 10: Boundedness | Queue limits and cleanup; total memory needs measurement |
@@ -26,7 +27,18 @@ Server recovery history (section 3, #8) is separate from outgoing queues.
 
 ## Connect a client
 
-Integration outline, from the repository root:
+Current server wiring:
+
+- `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
+- `broadcast_to_queues()` calls `push()` without waiting on socket writes.
+- `get_client_stats(ws)` returns an active client's monitoring snapshot.
+- Empty HISTORY is queued before registration; real history/recovery is pending.
+- Default queue caps: 256 messages and 1 MiB of encoded payloads, both provisional.
+- Rejected admission unregisters the client and starts one tracked close task
+  (code 1013). The handler awaits/removes that task and its monitor on exit.
+- This is a temporary fail-fast fallback, not final-preserving overload handling.
+
+Simplified lifecycle example, from the repository root:
 
 ```python
 from delivery.client_queue import ClientQueue, PushResult
