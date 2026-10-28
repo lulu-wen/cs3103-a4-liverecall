@@ -2,7 +2,7 @@
 
 | Member | Main responsibilities | Experiments/report sections | Agreed contribution % |
 |---|---|---|---:|
-| Member 1 |  |  |  |
+| Lim Zi En | Revision State,Bounded server history, Demo Video |  |  |
 | Member 2 |  |  |  |
 | Member 3 |  |  |  |
 | Member 4 |  |  |  |
