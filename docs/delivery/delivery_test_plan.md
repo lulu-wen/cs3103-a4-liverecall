@@ -9,7 +9,7 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-All 45 tests passed on Windows on 27 October 2026 with websockets 16.1.1.
+All 52 tests passed on Windows on 28 October 2026 with websockets 16.1.1.
 The original 38 component tests still use only the standard library.
 The code targets Python 3.10+;
 that runtime still needs verification on the team's Ubuntu environment.
@@ -22,6 +22,7 @@ that runtime still needs verification on the team's Ubuntu environment.
 | `test_client_monitor.py` | Counters, timing, snapshots and transport availability |
 | `test_client_delivery.py` | 100 controlled peers, ten blocked; one failed session isolated |
 | `test_server_delivery.py` | Real loopback WebSockets: HISTORY-first order, two clients, monitors, disconnect/shutdown cleanup, invalid hello, source replacement, full/oversized queue isolation |
+| `test_server_config.py` | Defaults, CLI/env precedence, invalid capacities/deadlines, and startup wiring |
 
 The 100-peer test checks that:
 
@@ -41,6 +42,9 @@ results and do not establish latency, caption completeness or RSS bounds.
 - An eight-second, 20-client smoke run with four source segments delivered
   80/80 finals and 240/240 revisions, with no duplicate/stale messages or
   connection errors. It is one Windows run, not a formal public-test result.
+- A second smoke check confirmed the unchanged runner's server inherited
+  512 messages, 2097152 bytes, a 5-second send timeout and a 2-second close timeout.
+  Final completeness/update coverage were 100%, with zero connection errors.
 
 ```bash
 python submission_check.py
@@ -82,4 +86,6 @@ python monitor_server.py --pid <SERVER_PID> --duration 60 --output t3_memory_run
 - Compare frozen `baseline` with the integrated implementation on the same VM.
 - Keep workload/measurement logic unchanged; use at least three runs each.
 - Record commit IDs, VM resources, versions, queue limits and timeouts.
+- Use [CLI or environment settings](client_delivery.md#experiment-settings) and
+  retain the server's startup settings line. The public runner inherits env values.
 - Report medians and correctness alongside performance. Explain trade-offs.

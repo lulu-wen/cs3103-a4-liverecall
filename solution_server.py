@@ -21,6 +21,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
+import os
 from typing import Any
 
 from websockets.asyncio.server import serve
@@ -191,14 +193,78 @@ async def main_async(port: int) -> None:
         close_timeout=CLIENT_CLOSE_TIMEOUT,
     ):
         print(f"LiveRecall listening on ws://0.0.0.0:{port}", flush=True)
+        print(
+            f"Delivery settings: queue_max_messages={QUEUE_MAX_MESSAGES}; "
+            f"queue_max_bytes={QUEUE_MAX_BYTES}; "
+            f"send_timeout={CLIENT_SEND_TIMEOUT}s; close_timeout={CLIENT_CLOSE_TIMEOUT}s",
+            flush=True,
+        )
         # Keep listening until the server is cancelled or stopped.
         await asyncio.Future()
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
+def positive_int(value: str) -> int:
+    """Reject non-positive capacities before starting the server."""
+    try:
+        number = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be a positive integer") from None
+    if number <= 0:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return number
+
+
+def positive_seconds(value: str) -> float:
+    """Reject zero, negative and non-finite delivery deadlines."""
+    try:
+        number = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be positive finite seconds") from None
+    if not math.isfinite(number) or number <= 0:
+        raise argparse.ArgumentTypeError("must be positive finite seconds")
+    return number
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="LiveRecall WebSocket server",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
     parser.add_argument("--port", type=int, default=8765)
+    # String environment defaults are validated by argparse just like CLI values.
+    # Explicit CLI values take precedence, including over invalid env defaults.
+    parser.add_argument(
+        "--queue-max-messages", type=positive_int,
+        default=os.getenv("LIVERECALL_QUEUE_MAX_MESSAGES", QUEUE_MAX_MESSAGES),
+        help="Maximum queued messages per client; env: LIVERECALL_QUEUE_MAX_MESSAGES",
+    )
+    parser.add_argument(
+        "--queue-max-bytes", type=positive_int,
+        default=os.getenv("LIVERECALL_QUEUE_MAX_BYTES", QUEUE_MAX_BYTES),
+        help="Maximum queued payload bytes per client; env: LIVERECALL_QUEUE_MAX_BYTES",
+    )
+    parser.add_argument(
+        "--send-timeout", type=positive_seconds,
+        default=os.getenv("LIVERECALL_SEND_TIMEOUT", CLIENT_SEND_TIMEOUT),
+        help="Seconds allowed per send attempt; env: LIVERECALL_SEND_TIMEOUT",
+    )
+    parser.add_argument(
+        "--close-timeout", type=positive_seconds,
+        default=os.getenv("LIVERECALL_CLOSE_TIMEOUT", CLIENT_CLOSE_TIMEOUT),
+        help="Seconds allowed per close attempt; env: LIVERECALL_CLOSE_TIMEOUT",
+    )
+    return parser
+
+
+def main() -> None:
+    global QUEUE_MAX_MESSAGES, QUEUE_MAX_BYTES, CLIENT_SEND_TIMEOUT, CLIENT_CLOSE_TIMEOUT
+    parser = build_parser()
     args = parser.parse_args()
+    # Set once before the event loop starts; all handlers use the same settings.
+    QUEUE_MAX_MESSAGES = args.queue_max_messages
+    QUEUE_MAX_BYTES = args.queue_max_bytes
+    CLIENT_SEND_TIMEOUT = args.send_timeout
+    CLIENT_CLOSE_TIMEOUT = args.close_timeout
     try:
         asyncio.run(main_async(args.port))
     except KeyboardInterrupt:

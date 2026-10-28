@@ -160,7 +160,7 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 
 - [x] Implement and independently test bounded queue, sender, lifecycle cleanup
   and monitoring modules in `delivery/`.
-- [x] Pass 45 local component/integration tests, including 100 controlled
+- [x] Pass 52 local component/integration/configuration tests, including 100 controlled
   connections with ten blocked senders and real loopback server tests.
   These are not Ubuntu public-test results.
 - [ ] Run `python submission_check.py --final` on the final Ubuntu submission;

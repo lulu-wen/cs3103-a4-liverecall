@@ -21,6 +21,8 @@ overload/recovery integration and Ubuntu results are pending.
 - Limits exclude object overhead, the current send, transport and OS buffers.
 - Send/close deadlines default to 10/3 seconds. These are design choices awaiting
   overload-policy review, not measured optimal values.
+- Queue limits and deadlines can be set by CLI/env; startup logs the effective
+  settings so experiment configurations can be recorded without editing code.
 
 ## Cleanup and monitoring
 
@@ -32,7 +34,8 @@ overload/recovery integration and Ubuntu results are pending.
 
 ## Evidence and remaining work
 
-- All 45 local tests passed on 27 October 2026, including real loopback WebSockets.
+- All 52 local tests passed on 28 October 2026, including real loopback WebSockets
+  and CLI/environment configuration checks.
 - With 100 controlled peers and ten blocked sends, normal senders continue;
   slow queues reject at their limits and accepted data drains in order later.
 - Tests check registry/task cleanup and isolation of a failed session.
