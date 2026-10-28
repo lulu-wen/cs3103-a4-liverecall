@@ -3,9 +3,10 @@
 CS3103 Assignment 4 - LiveRecall delivery integration.
 
 Each student connection has a bounded queue, independent sender, lifecycle
-supervision and monitor. Still incomplete; these mechanisms remain to integrate:
-  - revision-state management or deduplication
-  - recent-history recovery or late-join recovery
+supervision and monitor. Source updates pass through revision state
+(captions.state) and finals are kept in bounded history (captions.history).
+Still incomplete; these mechanisms remain to integrate:
+  - serving recent history on reconnect / late join (HISTORY is still empty)
   - semantic coalescing / backpressure
   - constrained-bandwidth overload handling
 
@@ -28,6 +29,8 @@ from typing import Any
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
+from captions.history import History
+from captions.state import CaptionState
 from delivery.client_monitor import ClientMonitor, DeliveryStats
 from delivery.client_queue import ClientQueue, PushResult
 from delivery.client_session import run_client_session
@@ -37,6 +40,24 @@ QUEUE_MAX_MESSAGES = 256
 QUEUE_MAX_BYTES = 1024 * 1024
 CLIENT_SEND_TIMEOUT = 10.0
 CLIENT_CLOSE_TIMEOUT = 3.0
+
+# Recovery history bounds (P1). The spec requires >= 60 s; the margin covers
+# a client evicted for overload plus its reconnect time.
+HISTORY_WINDOW_SECONDS = 90.0
+HISTORY_MAX_ITEMS = 5000
+
+# Authoritative revision state and bounded finalized-caption history (P1).
+# Module-level so they survive a source reconnect (a new SOURCE_HELLO).
+STATE = CaptionState()
+HISTORY = History(window_seconds=HISTORY_WINDOW_SECONDS, max_items=HISTORY_MAX_ITEMS)
+
+
+def reset_caption_state() -> None:
+    """Start a fresh lecture state (used by tests; a new process starts fresh anyway)."""
+    global STATE, HISTORY
+    STATE = CaptionState()
+    HISTORY = History(window_seconds=HISTORY_WINDOW_SECONDS, max_items=HISTORY_MAX_ITEMS)
+
 
 # Active connection -> outgoing queue.
 CLIENTS: dict[Any, ClientQueue] = {}
@@ -105,15 +126,23 @@ async def handle_source(ws, hello: dict[str, Any]) -> None:
 
             msg_type = msg.get("type")
             if msg_type == "CAPTION_UPDATE":
-                # Revision validation/history are still pending. Forward raw
-                # updates unchanged, but never wait on client socket writes.
-                broadcast_to_queues(raw)
+                # Only new information is forwarded: stale, duplicate,
+                # after-final and malformed updates are dropped and counted.
+                event = STATE.apply(msg, raw)
+                if event is not None:
+                    if event.final:
+                        # Store before broadcasting; no await in between, so a
+                        # client registering now sees it in HISTORY or live.
+                        HISTORY.add(event)
+                    # The source's original string, shared by every client
+                    # queue; never wait on client socket writes.
+                    broadcast_to_queues(event.raw)
                 # Give other tasks a turn even when source frames are already buffered.
                 await asyncio.sleep(0)
             elif msg_type == "SOURCE_DONE":
                 # Test-control message. The specification does not require it
                 # to be forwarded to clients.
-                print("source finished", flush=True)
+                print(f"source finished; caption state: {STATE.stats()}", flush=True)
             else:
                 # Forward compatibility: ignore fields/messages this baseline
                 # doesn't understand rather than crashing.

@@ -14,6 +14,8 @@ import solution_server as app
 
 class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        # Tests reuse segment numbers; start each from a fresh lecture state.
+        app.reset_caption_state()
         self.assertFalse(app.CLIENTS)
         self.assertFalse(app.MONITORS)
         self.assertFalse(app.EVICTIONS)

@@ -7,18 +7,40 @@
   <style>
     body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
     #status { font-weight: 700; }
-    #live { min-height: 6rem; border: 1px solid #bbb; border-radius: .4rem; padding: 1rem; margin: 1rem 0; }
-    .naive-line { padding: .25rem 0; border-bottom: 1px dotted #ddd; }
     button { padding: .55rem .75rem; margin: .2rem; }
     #recall { white-space: pre-wrap; margin-top: 1rem; border-left: 3px solid #ccc; padding-left: 1rem; }
     .hint { font-size: .9rem; color: #555; }
+
+    /* Live view (P1): one line per segment; newer revisions replace older ones. */
+    .live-wrap { position: relative; margin: 1rem 0; }
+    #live {
+      height: 18rem; overflow-y: auto; border: 1px solid #bbb; border-radius: .4rem;
+      padding: .75rem 1rem; font-size: 1.15rem; line-height: 1.5;
+    }
+    .caption { margin: 0 0 .45rem; transition: color .2s ease; }
+    .caption.final { color: #111; }
+    .caption.provisional { color: #6b6b6b; font-style: italic; }
+    .caption.provisional::after { content: " \2026"; } /* trailing ellipsis: still changing */
+    #jump-live {
+      position: absolute; right: .75rem; bottom: .75rem; margin: 0;
+      border: 0; border-radius: 1rem; background: #1f5fbf; color: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25); cursor: pointer;
+    }
+    .legend { font-size: .85rem; color: #555; }
+    .legend .caption { display: inline; }
   </style>
 </head>
 <body>
   <h1>LiveRecall</h1>
   <p>Connection: <span id="status">disconnected</span></p>
-  <p class="hint">Starter behavior is intentionally naive: every received revision is appended as a new line.</p>
-  <div id="live"></div>
+  <p class="legend">
+    <span class="caption final">Final caption</span> &middot;
+    <span class="caption provisional">Provisional caption</span>
+  </p>
+  <div class="live-wrap">
+    <div id="live" aria-label="Live captions"></div>
+    <button id="jump-live" type="button" hidden>Jump to live &darr;</button>
+  </div>
   <div>
     <button data-seconds="30">What did I miss? (30 s)</button>
     <button data-seconds="15">15 s</button>

@@ -18,8 +18,12 @@ caption_source.py -> solution_server.py -> browser clients
 ## Current status
 
 - The server now uses bounded per-client queues, senders, cleanup and monitoring.
-- The browser still uses the naive starter behavior. Revision state, real history
-  recovery and semantic overload handling remain to integrate.
+- Source updates pass through revision state (stale, duplicate, after-final and
+  malformed updates are dropped) and finals are kept in a bounded 90 s history
+  (`captions/`). HISTORY sent to clients is still empty until recovery is integrated.
+- The browser shows one line per segment, replaces revisions in place and
+  distinguishes provisional from final captions. Reconnect, recovery, recall and
+  semantic overload handling remain to integrate.
 - A rejected queue push temporarily closes that client with code 1013; this
   fallback does not guarantee delivery/recovery of finals under overload.
 - Local tests pass; Ubuntu public performance results are pending.
@@ -31,9 +35,11 @@ caption_source.py -> solution_server.py -> browser clients
 solution_server.py   Required server entry point
 caption_source.py    Deterministic caption source
 client/              Browser UI
+captions/            Revision state and bounded caption history
 delivery/            Per-client delivery modules
 tests/               Component/integration tests
 docs/delivery/       Delivery design, test plan and drafts
+docs/state/          Revision state and history design
 ```
 
 ## Ubuntu setup

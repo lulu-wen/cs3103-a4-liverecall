@@ -7,9 +7,9 @@ that exists only in the starter or in independently tested modules.
 
 ## Mandatory application functionality (section 3)
 
-- [ ] **1. Live captions:** continuously display incoming captions and visually
+- [x] **1. Live captions:** continuously display incoming captions and visually
   distinguish provisional (`final=false`) from finalized (`final=true`) captions.
-- [ ] **2. Revision replacement:** replace the existing line for a segment with
+- [x] **2. Revision replacement:** replace the existing line for a segment with
   its newer revision instead of appending a duplicate line.
 - [ ] **3. What did I miss?:** retain at least 60 seconds of finalized captions
   locally; default to the previous 30 seconds and offer 15/30/60-second views.
@@ -37,10 +37,10 @@ that exists only in the starter or in independently tested modules.
 
 - [ ] Accept WebSocket `SOURCE_HELLO` with `session`; support the required
   one-source, one-session (`L1`) evaluation path.
-- [ ] Preserve `CAPTION_UPDATE` fields and meanings: `type`, `session`, `segment`,
+- [x] Preserve `CAPTION_UPDATE` fields and meanings: `type`, `session`, `segment`,
   `revision`, `source_ts`, `final`, and `text`. Do not assume a fixed revision
   count per segment; older revisions must never overwrite finalized state.
-- [ ] Ignore unrecognized source fields and continue normal operation;
+- [x] Ignore unrecognized source fields and continue normal operation;
   `SOURCE_DONE` may be ignored after earlier updates are processed.
 - [ ] Handle `CLIENT_HELLO` fields: `client_id`, `session`, `last_segment`,
   `last_revision`, and `history_seconds`. Resume progress identifies finalized
@@ -163,6 +163,10 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 - [x] Pass 52 local component/integration/configuration tests, including 100 controlled
   connections with ten blocked senders and real loopback server tests.
   These are not Ubuntu public-test results.
+- [x] Implement and test revision state and bounded history in `captions/`
+  (unit tests plus loopback tests through the real server; see
+  [docs/state/caption_state.md](state/caption_state.md)). Bounded history is
+  kept but not yet served to clients, so item 8 stays open until recovery uses it.
 - [ ] Run `python submission_check.py --final` on the final Ubuntu submission;
   this checks compatibility, not full correctness/performance.
 
