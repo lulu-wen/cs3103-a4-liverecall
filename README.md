@@ -67,6 +67,21 @@ python caption_source.py --duration 120
 
 The application is incomplete; see [DEMO_GUIDE.md](DEMO_GUIDE.md) for the final demo behavior.
 
+## Delivery settings
+
+The required command still works with the original defaults. For experiments:
+
+```bash
+python solution_server.py --port 8765 --queue-max-messages 512 --queue-max-bytes 2097152 --send-timeout 5 --close-timeout 2
+```
+
+- Queue limits must be positive integers; bytes count encoded payloads.
+- Timeouts are positive finite seconds and accept fractions.
+- Priority: CLI argument > `LIVERECALL_*` environment variable > default.
+- Startup prints the settings actually used. See the
+  [configuration guide](docs/delivery/client_delivery.md#experiment-settings)
+  for defaults and unchanged-harness examples.
+
 ## Tests
 
 ```bash

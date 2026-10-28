@@ -69,12 +69,52 @@ async def client_handler(ws, serialized_history):
 - The caller owns resources until the session starts, including cleanup if a
   task is cancelled before its first execution.
 
-## Deadlines
+## Experiment settings
+
+Configure the server at startup; no code edits are needed:
+
+| CLI option | Environment variable | Default |
+| --- | --- | --- |
+| `--queue-max-messages` | `LIVERECALL_QUEUE_MAX_MESSAGES` | 256 messages/client |
+| `--queue-max-bytes` | `LIVERECALL_QUEUE_MAX_BYTES` | 1048576 payload bytes/client |
+| `--send-timeout` | `LIVERECALL_SEND_TIMEOUT` | 10 seconds/attempt |
+| `--close-timeout` | `LIVERECALL_CLOSE_TIMEOUT` | 3 seconds/attempt |
+
+- CLI values override environment values; otherwise the original defaults apply.
+- Limits must be positive integers; deadlines must be positive finite seconds.
+- Invalid settings fail before startup. A byte limit too small for initial
+  HISTORY will cause clients to be rejected, even though the value is positive.
+- The server prints effective settings at startup. Keep them with experiment results.
+- `python solution_server.py --help` lists all options.
+
+The public runner starts its own server and only passes `--port`. Use inherited
+environment variables to configure it without changing instructor test code.
+
+Ubuntu (variables apply only to this command):
+
+```bash
+env LIVERECALL_QUEUE_MAX_MESSAGES=512 LIVERECALL_SEND_TIMEOUT=5 python run_demo.py --clients 100 --duration 60 --runs 3 --slow-percent 10 --slow-ms 500 --output-stem t3_q512
+```
+
+PowerShell (clear the variables afterward):
+
+```powershell
+$env:LIVERECALL_QUEUE_MAX_MESSAGES = "512"
+$env:LIVERECALL_SEND_TIMEOUT = "5"
+python run_demo.py --clients 20 --duration 20 --runs 1 --output-stem local_q512
+Remove-Item Env:LIVERECALL_QUEUE_MAX_MESSAGES, Env:LIVERECALL_SEND_TIMEOUT
+```
+
+Use a distinct output stem per configuration. PowerShell runs are development
+checks; formal performance measurements still require Ubuntu.
+
+## Deadline behavior
 
 - `send_timeout=10.0`: maximum wait for one send; timeout closes with code 1013.
 - `close_timeout=3.0`: limit for each close attempt.
 - Other send errors close with code 1011. Errors/cancellation propagate.
-- These are configurable choices, not spec-mandated values.
+- These are configurable choices, not spec-mandated values. No zero/disabled
+  timeout mode is provided.
 
 ## Monitoring
 
