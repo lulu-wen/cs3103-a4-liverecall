@@ -29,7 +29,7 @@ from typing import Any
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from captions.history import History
+from captions.history import History, history_message
 from captions.state import CaptionState
 from delivery.client_monitor import ClientMonitor, DeliveryStats
 from delivery.client_queue import ClientQueue, PushResult
@@ -155,10 +155,20 @@ async def handle_source(ws, hello: dict[str, Any]) -> None:
 
 async def handle_client(ws, hello: dict[str, Any]) -> None:
     client_id = hello.get("client_id")
+    client_last_segment = hello.get("last_segment")
+    client_last_revision = hello.get("last_revision")
+    client_history_seconds = hello.get("history_seconds")
+
 
     # Queue HISTORY before live updates; it is still empty until recovery is implemented.
     queue = ClientQueue(max_messages=QUEUE_MAX_MESSAGES, max_bytes=QUEUE_MAX_BYTES)
-    result = queue.push(json.dumps({"type": "HISTORY", "items": []}))
+    items = HISTORY.since(
+        last_segment = client_last_segment,
+        last_revision = client_last_revision,
+        seconds = client_history_seconds,
+        max_bytes = QUEUE_MAX_BYTES,
+    )
+    result = queue.push(history_message(items));
     if result is not PushResult.ACCEPTED:
         queue.close()
         await ws.close(code=1013, reason="Initial history exceeds queue capacity")
