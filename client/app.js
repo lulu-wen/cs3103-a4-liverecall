@@ -29,9 +29,12 @@ const STICK_TO_BOTTOM_PX = 48;
 // segment -> { revision, final, text, source_ts, el }
 const segments = new Map();
 let forgottenUpTo = 0;  // every segment <= this has been dropped from memory
+let lastSeg = null;  // the last segment that was finalized and accepted
 
 const jumpButton = document.getElementById("jump-live");
 let followLive = true;
+
+const LocalRecallStore = [];
 
 function isPositiveInt(value) {
   return Number.isInteger(value) && value >= 1;
@@ -63,6 +66,11 @@ function acceptUpdate(msg) {
   entry.text = msg.text;
   entry.source_ts = msg.source_ts;
   segments.set(msg.segment, entry);
+
+  if (msg.final && (!lastSeg || msg.segment > lastSeg.segment)) {
+    lastSeg = { segment: msg.segment, revision: msg.revision };
+  }
+
   return "accepted";
 }
 
@@ -140,6 +148,9 @@ function applyCaption(msg) {
     } else {
       jumpButton.hidden = false;
     }
+    if (msg.final) {
+      addToLocalRecallStore(msg);
+    }
   }
   return result;
 }
@@ -160,6 +171,28 @@ function numericClientId() {
   return Number(value);
 }
 
+function getMissedCaptionsSince(seconds) {
+  const cutoff = Date.now() /1000 - seconds;
+  const cleanCutoff = Date.now() / 1000 - 60;
+
+  while (LocalRecallStore.length > 0 && LocalRecallStore[0].source_ts < cleanCutoff) {
+    LocalRecallStore.shift();
+  }
+
+  return LocalRecallStore.filter(msg => msg.source_ts >= cutoff);
+}
+
+function addToLocalRecallStore(msg) {
+  LocalRecallStore.push(msg);
+  LocalRecallStore.sort((a, b) => a.source_ts - b.source_ts);
+
+  const cutoff = Date.now() / 1000 - 60;  // 60 seconds ago
+  while (LocalRecallStore.length > 0 && LocalRecallStore[0].source_ts < cutoff) {
+    LocalRecallStore.shift();
+  }
+
+}
+
 function connect() {
   statusEl.textContent = "connecting";
   ws = new WebSocket(WS_URL);
@@ -170,9 +203,9 @@ function connect() {
       type: "CLIENT_HELLO",
       client_id: numericClientId(),
       session: "L1",
-      last_segment: 0,       // TODO: resume latest finalized state
-      last_revision: 0,
-      history_seconds: 30
+      last_segment: lastSeg ? lastSeg.segment : 0,
+      last_revision: lastSeg ? lastSeg.revision : 0,
+      history_seconds: 60
     }));
   });
 
@@ -181,15 +214,19 @@ function connect() {
     if (msg.type === "CAPTION_UPDATE") {
       applyCaption(msg);
     } else if (msg.type === "HISTORY") {
-      console.log(`HISTORY with ${msg.items?.length ?? 0} item(s)`, msg);
-      // TODO (P2): merge history via applyCaption(item) for each item, then
-      // add accepted finals to the local recall store.
+      //merge history via applyCaption(item) for each item, and add accepted finals to the local recall store in applycaption.
+      for(const item of msg.items || []) {
+        applyCaption(item); 
+      }
     }
   });
 
   ws.addEventListener("close", () => {
-    statusEl.textContent = "disconnected";
     // TODO: automatic reconnect after a short delay, using finalized resume state.
+    statusEl.textContent = "disconnected, reconnecting in 3s...";
+    setTimeout(() => {
+      connect();
+    }, 3000);
   });
 
   ws.addEventListener("error", () => {
@@ -200,8 +237,9 @@ function connect() {
 for (const button of document.querySelectorAll("button[data-seconds]")) {
   button.addEventListener("click", () => {
     const seconds = Number(button.dataset.seconds);
-    recallEl.textContent = `TODO: show finalized captions from the previous ${seconds} seconds using local state.`;
-  });
+    missedCaptions = getMissedCaptionsSince(seconds);
+    recallEl.textContent = missedCaptions.map(msg => `[${new Date(msg.source_ts * 1000).toLocaleTimeString()}] ${msg.text}`).join("\n") || "(no captions)";
+    });
 }
 
 connect();
