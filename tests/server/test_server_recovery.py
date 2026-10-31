@@ -61,6 +61,12 @@ class ServerRecoveryTests(unittest.IsolatedAsyncioTestCase):
         raw = await asyncio.wait_for(ws.recv(), 3)
         return json.loads(raw)
 
+    async def wait_until(self, predicate):
+        async def poll():
+            while not predicate():
+                await asyncio.sleep(0)
+        await asyncio.wait_for(poll(), 3)
+
     async def assert_rejected_without_context(self, ws, code=1013):
         with self.assertRaises(ConnectionClosed):
             await asyncio.wait_for(ws.recv(), 3)
@@ -191,6 +197,82 @@ class ServerRecoveryTests(unittest.IsolatedAsyncioTestCase):
             if not task.done():
                 task.cancel()
             await asyncio.gather(task, return_exceptions=True)
+
+    async def test_ten_seconds_offline_recovers_missing_finals_then_latest_active(self):
+        # Advance the history clock, not wall time: no ten-second sleep needed.
+        now = [1000.0]
+        history = History(clock=lambda: now[0])
+        with patch.object(app, "HISTORY", history), patch(
+            "captions.state.monotonic", side_effect=lambda: now[0],
+        ):
+            first, _ = self.seed(1, revision=3)
+            old_ws = await self.student()
+            self.assertEqual(await self.receive(old_ws), {"type": "HISTORY", "items": [first]})
+            await old_ws.close()
+            await self.wait_until(lambda: not app.MONITORS)
+            now[0] += 5
+            second, _ = self.seed(2, revision=3)
+            now[0] += 5
+            third, _ = self.seed(3, revision=2)
+            self.seed(4, revision=1, final=False)
+            active, _ = self.seed(4, revision=4, final=False)
+            resumed = await self.student(last_segment=1, last_revision=3)
+            self.assertEqual(await self.receive(resumed), {
+                "type": "HISTORY", "items": [second, third],
+            })
+            self.assertEqual(await self.receive(resumed), active)
+            source = await self.stack.enter_async_context(connect(self.uri))
+            await source.send('{"type":"SOURCE_HELLO","session":"L1"}')
+            # Replayed/stale updates must not appear before the new final.
+            for message in (second, self.caption(4, revision=2, final=False)):
+                await source.send(json.dumps(message))
+            final = self.caption(4, revision=5)
+            await source.send(json.dumps(final))
+            self.assertEqual(await self.receive(resumed), final)
+
+    async def test_evicted_client_recovers_finals_while_healthy_client_continues(self):
+        original_session = app.run_client_session
+        blocked = asyncio.Event()
+        release = asyncio.Event()
+        chosen = []
+
+        async def gated_session(ws, queue, clients, **kwargs):
+            if not chosen:
+                chosen.append(ws)
+                original_send = ws.send
+
+                async def gated_send(payload):
+                    blocked.set()
+                    await release.wait()
+                    await original_send(payload)
+
+                ws.send = gated_send
+            await original_session(ws, queue, clients, **kwargs)
+
+        try:
+            with patch.object(app, "run_client_session", gated_session):
+                with patch.object(app, "QUEUE_MAX_MESSAGES", 1):
+                    slow = await self.student()
+                    await asyncio.wait_for(blocked.wait(), 3)
+                healthy = await self.student(client_id=2)
+                self.assertEqual(await self.receive(healthy), {"type": "HISTORY", "items": []})
+                source = await self.stack.enter_async_context(connect(self.uri))
+                await source.send('{"type":"SOURCE_HELLO","session":"L1"}')
+                finals = [self.caption(1, revision=3), self.caption(2, revision=3)]
+                for message in finals:
+                    await source.send(json.dumps(message))
+                    self.assertEqual(await self.receive(healthy), message)
+                await asyncio.wait_for(slow.wait_closed(), 3)
+                self.assertEqual(slow.close_code, 1013)
+                await self.wait_until(lambda: len(app.MONITORS) == 1 and not app.EVICTIONS)
+                resumed = await self.student(client_id=1)
+                self.assertEqual(await self.receive(resumed), {"type": "HISTORY", "items": finals})
+                live = self.caption(3, revision=3)
+                await source.send(json.dumps(live))
+                self.assertEqual(await self.receive(healthy), live)
+                self.assertEqual(await self.receive(resumed), live)
+        finally:
+            release.set()
 
 
 if __name__ == "__main__":

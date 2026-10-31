@@ -40,9 +40,15 @@ client/              Browser UI
 captions/            Revision state and bounded caption history
 delivery/            Per-client delivery modules
 tests/               Component/integration tests
+  captions/          Caption revision state and history
+  delivery/          Queues, senders, lifecycle, monitoring and controlled peers
+  server/            Loopback protocol, recovery, pipeline and configuration
 docs/delivery/       Delivery design, test plan and drafts
 docs/state/          Revision state and history design
 ```
+
+Run all tests from the repository root: `python -m unittest discover -s tests -t .`.
+See [test groups and commands](tests/README.md).
 
 ## Ubuntu setup
 
@@ -94,7 +100,7 @@ python solution_server.py --port 8765 --queue-max-messages 512 --queue-max-bytes
 
 ```bash
 # Component and real WebSocket checks; install requirements.txt first
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 
 # Public run; uses the current server
 python run_demo.py --clients 20 --duration 20 --runs 3 --output-stem t1

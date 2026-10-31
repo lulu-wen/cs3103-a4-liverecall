@@ -234,6 +234,85 @@ class ClientDeliveryTests(unittest.IsolatedAsyncioTestCase):
         healthy.closed.set()
         await asyncio.wait_for(healthy_task, 1)
 
+    async def test_revision_burst_keeps_latest_active_and_completed_segments_bounded(self):
+        ws = ControlledConnection(blocked=True)
+        queue, monitor, task = self.start_client(ws, max_messages=5, max_bytes=2048)
+        history = '{"type":"HISTORY","items":[]}'
+        queue.push(history)
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).in_flight)
+        latest = {}
+        # Policy is deliberately enabled by this test, not by the real server.
+        for revision in range(1, 101):
+            for segment in range(1, 6):
+                final = revision == 100 and segment <= 3
+                payload = json.dumps({
+                    "type": "CAPTION_UPDATE", "segment": segment,
+                    "revision": revision, "final": final,
+                    "text": "caption " + "x" * (revision % 20), "source_ts": 100.0,
+                })
+                self.assertEqual(queue.push_caption(
+                    payload, segment=segment, revision=revision,
+                    final=final, coalesce=True,
+                ), PushResult.ACCEPTED)
+                latest[segment] = payload
+                stats = queue.stats()
+                self.assertLessEqual(stats.depth, 5)
+                self.assertEqual(stats.pending_bytes,
+                                 sum(len(value.encode()) for value in latest.values()))
+                self.assertLessEqual(stats.pending_bytes, 2048)
+        self.assertEqual(queue.stats().depth, 5)
+        ws.release.set()
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).sent_messages == 6)
+        self.assertEqual(ws.messages, [history, *latest.values()])
+        delivered = [json.loads(payload) for payload in ws.messages[1:]]
+        self.assertEqual([item["segment"] for item in delivered if item["final"]], [1, 2, 3])
+        self.assertTrue(all(item["revision"] == 100 for item in delivered))
+        ws.closed.set()
+        await asyncio.wait_for(task, 5)
+
+    async def test_disconnect_waves_release_blocked_senders_without_affecting_healthy_client(self):
+        healthy = ControlledConnection()
+        healthy_queue, healthy_monitor, healthy_task = self.start_client(healthy)
+        await self.wait_until(lambda: healthy in self.clients)
+        for wave in range(3):
+            blocked = []
+            for _ in range(10):
+                ws = ControlledConnection(blocked=True)
+                queue, monitor, task = self.start_client(ws)
+                queue.push("in flight")
+                blocked.append((ws, queue, monitor, task))
+            await self.wait_until(lambda: all(
+                monitor.snapshot(queue, ws).in_flight
+                for ws, queue, monitor, _ in blocked
+            ))
+            for ws, queue, _, _ in blocked:
+                queue.push("pending")
+                ws.closed.set()
+            await asyncio.wait_for(asyncio.gather(*(entry[3] for entry in blocked)), 5)
+            for ws, queue, monitor, _ in blocked:
+                self.assertTrue(queue.stats().closed)
+                self.assertEqual(queue.stats().depth, 0)
+                self.assertEqual(queue.stats().pending_bytes, 0)
+                self.assertFalse(monitor.snapshot(queue, ws).in_flight)
+                self.assertEqual(ws.messages, [])
+            self.assertEqual(set(self.clients), {healthy})
+            self.assertFalse([
+                task for task in asyncio.all_tasks()
+                if task.get_name().startswith("client-")
+                and task.get_name() not in ("client-sender", "client-disconnect")
+            ])
+            # Only the persistent healthy connection should still own these tasks.
+            owned = [task for task in asyncio.all_tasks()
+                     if task.get_name().startswith("client-")]
+            self.assertEqual(len(owned), 2)
+            healthy_queue.push(f"wave {wave}")
+            await self.wait_until(lambda: healthy_monitor.snapshot(
+                healthy_queue, healthy,
+            ).sent_messages == wave + 1)
+        self.assertEqual(healthy.messages, ["wave 0", "wave 1", "wave 2"])
+        healthy.closed.set()
+        await asyncio.wait_for(healthy_task, 5)
+
 
 if __name__ == "__main__":
     unittest.main()
