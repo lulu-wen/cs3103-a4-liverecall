@@ -55,7 +55,7 @@ class Event:
 
 
 def is_well_formed(msg: Any) -> bool:
-    """True if the fields the server uses have the types caption_source.py sends.
+    """Check source field types and positive segment/revision identifiers.
 
     Only these fields are checked; any extra fields are allowed. ``type(x) is
     int`` (not isinstance) because in Python ``True`` is also an int.
@@ -63,7 +63,9 @@ def is_well_formed(msg: Any) -> bool:
     return (isinstance(msg, dict)
             and msg.get("type") == "CAPTION_UPDATE"
             and type(msg.get("segment")) is int
+            and msg["segment"] > 0
             and type(msg.get("revision")) is int
+            and msg["revision"] > 0
             and type(msg.get("final")) is bool
             and type(msg.get("source_ts")) in (int, float)
             and isinstance(msg.get("text"), str))

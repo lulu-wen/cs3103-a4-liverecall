@@ -9,7 +9,7 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -t . -v
 ```
 
-All 108 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
+All 110 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
 The original 38 component tests still use only the standard library.
 The code targets Python 3.10+;
 that runtime still needs verification on the team's Ubuntu environment.
@@ -43,8 +43,11 @@ Three additional controlled-peer scenarios verify the coalescing API:
 - Normal mode sends HISTORY followed by every queued caption revision.
 - An oversized replacement is rejected and the original backlog still drains.
 
-These tests invoke `push_caption()` directly. The server overload policy is
-not wired yet, and failed admission does not imply successful recovery.
+These tests invoke `push_caption()` directly. Two additional loopback tests
+verify server FULL retries under count and byte limits: normal clients keep all
+revisions while blocked clients receive the in-flight revision followed by the
+replacement final without eviction. Unresolved final backlogs still evict; failed
+admission does not imply successful recovery. Lag-based mode transitions are pending.
 
 ## Local server checks completed
 

@@ -30,11 +30,13 @@ Server recovery history (section 3, #8) is separate from outgoing queues.
 Current server wiring:
 
 - `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
-- `broadcast_to_queues()` calls `push()` without waiting on socket writes.
+- `broadcast_to_queues()` calls `push_caption()` without waiting on socket writes.
+  Normal admission preserves every revision. FULL retries once with coalescing;
+  other failures do not trigger a replacement attempt.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
 - HISTORY and the latest active provisional updates are queued before registration.
 - Default queue caps: 256 messages and 1 MiB of encoded payloads, both provisional.
-- Rejected admission unregisters the client and starts one tracked close task
+- Unresolved admission failure unregisters the client and starts one tracked close task
   (code 1013). The handler awaits/removes that task and its monitor on exit.
 - This is a temporary fail-fast fallback, not final-preserving overload handling.
 
@@ -58,8 +60,9 @@ result = queue.push_caption(
 - If admission still fails, the entire old backlog stays unchanged. Handle the
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
-- Current server broadcasts still use `push()`. Policy wiring remains pending;
-  this API alone does not enable degraded mode in the server.
+- Current live broadcasts use this API and enable coalescing on a FULL retry.
+  Lag-based degraded-mode transitions remain pending. Initial context still uses
+  `push()`, so these opaque initial messages are not replacement candidates.
 - A coalescing push scans the bounded queue; normal pushes remain constant-time
   apart from UTF-8 byte counting.
 

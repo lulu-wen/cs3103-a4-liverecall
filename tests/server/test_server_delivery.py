@@ -179,14 +179,78 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(blocked.wait(), 3)
             self.assertEqual(await self.receive(normal), self.caption(1))
             for revision in (2, 3, 4):
-                await source.send(json.dumps(self.caption(revision)))
-                self.assertEqual(await self.receive(normal), self.caption(revision))
+                update = self.caption(revision)
+                update.update(segment=revision, final=True)
+                await source.send(json.dumps(update))
+                self.assertEqual(await self.receive(normal), update)
             await asyncio.wait_for(slow.wait_closed(), 3)
             self.assertEqual(slow.close_code, 1013)
             await self.wait_until(lambda: len(app.MONITORS) == 1 and not app.EVICTIONS)
             self.assertEqual(len(app.CLIENTS), 1)
             await source.send(json.dumps(self.caption(5)))
             self.assertEqual(await self.receive(normal), self.caption(5))
+
+    async def check_full_queue_coalesces(self, *, byte_limited):
+        original_session = app.run_client_session
+        blocked = asyncio.Event()
+        release = asyncio.Event()
+        chosen = []
+
+        async def controlled_session(ws, queue, clients, **kwargs):
+            if not chosen:
+                chosen.append(ws)
+                original_send = ws.send
+
+                async def gated_send(payload):
+                    if json.loads(payload).get("type") == "CAPTION_UPDATE":
+                        blocked.set()
+                        await release.wait()
+                    await original_send(payload)
+
+                with patch.object(ws, "send", gated_send):
+                    await original_session(ws, queue, clients, **kwargs)
+            else:
+                await original_session(ws, queue, clients, **kwargs)
+
+        count = 10 if byte_limited else 2
+        byte_limit = len(json.dumps(self.caption()).encode()) * 3 // 2 if byte_limited else 4096
+        try:
+            with patch.object(app, "run_client_session", controlled_session):
+                with patch.object(app, "QUEUE_MAX_MESSAGES", count), \
+                        patch.object(app, "QUEUE_MAX_BYTES", byte_limit):
+                    slow = await self.student(1)
+                    await self.receive(slow)
+                normal = await self.student(2)
+                await self.receive(normal)
+                source = await self.source()
+                first = self.caption(1)
+                await source.send(json.dumps(first))
+                await asyncio.wait_for(blocked.wait(), 3)
+                self.assertEqual(await self.receive(normal), first)
+                for revision in (2, 3, 4):
+                    update = self.caption(revision)
+                    update["final"] = revision == 4
+                    await source.send(json.dumps(update))
+                    self.assertEqual(await self.receive(normal), update)
+                queue = app.CLIENTS[chosen[0]]
+                self.assertEqual(queue.stats().depth, 1)
+                self.assertEqual(queue.stats().pending_bytes, len(json.dumps(update).encode()))
+                self.assertEqual(len(app.CLIENTS), 2)
+                self.assertFalse(app.EVICTIONS)
+                release.set()
+                self.assertEqual(await self.receive(slow), first)
+                self.assertEqual(await self.receive(slow), update)
+                await self.wait_until(lambda: app.get_client_stats(chosen[0]).sent_messages == 3)
+                self.assertEqual(queue.stats().depth, 0)
+                self.assertEqual(queue.stats().pending_bytes, 0)
+        finally:
+            release.set()
+
+    async def test_count_full_coalesces_obsolete_revisions_before_eviction(self):
+        await self.check_full_queue_coalesces(byte_limited=False)
+
+    async def test_byte_full_coalesces_obsolete_revisions_before_eviction(self):
+        await self.check_full_queue_coalesces(byte_limited=True)
 
 
 if __name__ == "__main__":

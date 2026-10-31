@@ -24,6 +24,8 @@ the application packages `delivery` and `captions`.
 
 ## Additional edge scenarios
 
+- Real loopback count/byte overflow: the server coalesces obsolete provisional
+  revisions before eviction, while a healthy client receives every revision.
 
 - 500 revisions across five segments: coalescing retains completed finals and
   the latest active captions within queue count/byte limits.

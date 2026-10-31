@@ -26,7 +26,8 @@ caption_source.py -> solution_server.py -> browser clients
   distinguishes provisional from final captions. Local recall, HISTORY merge and
   fixed-delay reconnect are implemented; full browser recovery validation and
   semantic overload handling remain pending.
-- A rejected queue push temporarily closes that client with code 1013; this
+- Live broadcasts retry FULL with same-segment provisional coalescing; unresolved
+  admission failure temporarily closes that client with code 1013. This
   fallback does not guarantee delivery/recovery of finals under overload.
 - Local tests pass; Ubuntu public performance results are pending.
 - Track required work in the [project checklist](docs/project_checklist.md).
