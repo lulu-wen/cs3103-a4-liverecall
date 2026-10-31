@@ -38,6 +38,31 @@ Current server wiring:
   (code 1013). The handler awaits/removes that task and its monitor on exit.
 - This is a temporary fail-fast fallback, not final-preserving overload handling.
 
+## Caption coalescing API
+
+`push()` remains an opaque FIFO. Policy code can use `push_caption()` with
+validated caption metadata:
+
+```python
+result = queue.push_caption(
+    event.raw, segment=event.segment, revision=event.revision,
+    final=event.final, coalesce=degraded,
+)
+```
+
+- `degraded` is chosen by the overload policy; the queue does not detect overload.
+- With `coalesce=False` (default), every revision is queued normally.
+- With `coalesce=True`, admission replaces queued older provisional revisions
+  of the same segment, appending the new update after the remaining messages.
+- Finals, HISTORY, other segments and in-flight sends are untouched.
+- If admission still fails, the entire old backlog stays unchanged. Handle the
+  result explicitly; coalescing does not guarantee final delivery or recovery.
+- Metadata must match the payload and come from validated caption state.
+- Current server broadcasts still use `push()`. Policy wiring remains pending;
+  this API alone does not enable degraded mode in the server.
+- A coalescing push scans the bounded queue; normal pushes remain constant-time
+  apart from UTF-8 byte counting.
+
 Simplified lifecycle example, from the repository root:
 
 ```python

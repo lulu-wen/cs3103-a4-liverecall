@@ -1,8 +1,8 @@
 """Server-side bounded FIFO for one client's outgoing WebSocket messages.
 
 Use on one asyncio event loop, with one consumer (sender task) per queue.
-This module does not interpret captions or decide overload policy. The caller
-must handle rejected pushes; no existing message is silently discarded.
+Caption metadata allows opt-in replacement of obsolete provisionals. The caller
+decides when to enable it and must handle rejected pushes.
 """
 
 from __future__ import annotations
@@ -38,6 +38,9 @@ class _PendingMessage:
     payload: str | bytes
     size: int
     queued_at: float
+    segment: int | None = None
+    revision: int | None = None
+    final: bool | None = None
 
 
 class ClientQueue:
@@ -67,6 +70,33 @@ class ClientQueue:
         payload cannot fit even in an empty queue. In either case, the caller
         retains responsibility for delivery/recovery, particularly for finals.
         """
+        return self._push(payload)
+
+    def push_caption(
+        self, payload: str | bytes, *, segment: int, revision: int,
+        final: bool, coalesce: bool = False,
+    ) -> PushResult:
+        """Admit an already validated caption, optionally replacing older provisionals.
+
+        Metadata must describe the serialized payload. The upstream caption state
+        owns revision validation; this queue neither parses JSON nor keeps a
+        second caption history. Normal mode retains every revision. Coalescing
+        removes only queued, lower revisions of this segment with final=False.
+        Finals, opaque messages and other segments are never removed. Rejection
+        leaves the entire backlog unchanged, including replaceable revisions.
+        """
+        for name, value in (("segment", segment), ("revision", revision)):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{name} must be a positive integer")
+        if type(final) is not bool or type(coalesce) is not bool:
+            raise TypeError("final and coalesce must be booleans")
+        return self._push(payload, segment, revision, final, coalesce)
+
+    def _push(
+        self, payload: str | bytes, segment: int | None = None,
+        revision: int | None = None, final: bool | None = None,
+        coalesce: bool = False,
+    ) -> PushResult:
         if not isinstance(payload, (str, bytes)):
             raise TypeError("payload must be serialized str or bytes")
         if self._closed:
@@ -74,11 +104,28 @@ class ClientQueue:
         size = len(payload.encode("utf-8")) if isinstance(payload, str) else len(payload)
         if size > self._max_bytes:
             return PushResult.TOO_LARGE
-        if (len(self._items) >= self._max_messages
-                or self._pending_bytes + size > self._max_bytes):
+        obsolete = []
+        if coalesce:
+            obsolete = [
+                item for item in self._items
+                if item.segment == segment and item.final is False
+                and item.revision < revision
+            ]
+        removed_bytes = sum(item.size for item in obsolete)
+        if (len(self._items) - len(obsolete) >= self._max_messages
+                or self._pending_bytes - removed_bytes + size > self._max_bytes):
             return PushResult.FULL
-        self._items.append(_PendingMessage(payload, size, monotonic()))
-        self._pending_bytes += size
+        # Commit only after admission succeeds. Keep the remaining FIFO order;
+        # append the new update after all messages that arrived before it.
+        if obsolete:
+            removed_ids = {id(item) for item in obsolete}
+            remaining = deque()
+            for item in self._items:
+                if id(item) not in removed_ids:
+                    remaining.append(item)
+            self._items = remaining
+        self._items.append(_PendingMessage(payload, size, monotonic(), segment, revision, final))
+        self._pending_bytes += size - removed_bytes
         self._ready.set()
         return PushResult.ACCEPTED
 
