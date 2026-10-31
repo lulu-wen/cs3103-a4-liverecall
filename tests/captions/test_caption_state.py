@@ -94,6 +94,7 @@ class CaptionStateTests(unittest.TestCase):
         bad = [
             None, [], "text", {"type": "CAPTION_UPDATE"}, missing,
             cap("3", 1), cap(1, "2"), cap(True, 1), cap(1, 1.0), cap(1, None),
+            cap(0, 1), cap(-1, 1), cap(1, 0), cap(1, -1),
             cap(1, 1, source_ts="now"), cap(1, 1, source_ts=True),
             cap(1, 1, final="true"), cap(1, 1, final=1), cap(1, 1, text=5),
             {**cap(1, 1), "type": "SOMETHING_ELSE"},

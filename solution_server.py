@@ -29,7 +29,7 @@ from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
 from captions.history import History, history_message
-from captions.state import CaptionState
+from captions.state import CaptionState, Event
 from delivery.client_monitor import ClientMonitor, DeliveryStats
 from delivery.client_queue import ClientQueue, PushResult
 from delivery.client_session import run_client_session
@@ -85,16 +85,26 @@ async def close_overloaded_client(ws, queue: ClientQueue) -> None:
         queue.close()
 
 
-def broadcast_to_queues(raw_message: str | bytes) -> None:
+def broadcast_to_queues(event: Event) -> None:
     """Admit updates without awaiting any client's network I/O.
 
-    Replacement point for the future semantic overload policy: it must handle
-    rejected updates, especially finals, instead of silently ignoring FULL.
+    Preserve all revisions while capacity permits. Retry FULL once with
+    same-segment coalescing before falling back to eviction. Lag detection and
+    degraded-mode transitions remain the overload policy's responsibility.
     """
     # Snapshot the registry because rejected clients are removed during iteration.
     for ws, queue in list(CLIENTS.items()):
         # Enqueue without waiting for network I/O; each sender handles delivery.
-        result = queue.push(raw_message)
+        result = queue.push_caption(
+            event.raw, segment=event.segment, revision=event.revision, final=event.final,
+        )
+        if result is PushResult.FULL:
+            # The failed push leaves the backlog intact. Retry atomically,
+            # removing only older queued provisionals replaced by this event.
+            result = queue.push_caption(
+                event.raw, segment=event.segment, revision=event.revision,
+                final=event.final, coalesce=True,
+            )
         if result is PushResult.ACCEPTED:
             continue
         # Stop admitting updates for this client.
@@ -138,7 +148,7 @@ async def handle_source(ws, hello: dict[str, Any]) -> None:
                         HISTORY.add(event)
                     # The source's original string, shared by every client
                     # queue; never wait on client socket writes.
-                    broadcast_to_queues(event.raw)
+                    broadcast_to_queues(event)
                 # Give other tasks a turn even when source frames are already buffered.
                 await asyncio.sleep(0)
             elif msg_type == "SOURCE_DONE":
