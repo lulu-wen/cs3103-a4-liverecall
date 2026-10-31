@@ -101,8 +101,12 @@ Covers spec section 3 #1, #2, #7 (server side), #8 and section 4.1. Code:
   not yet the team's Ubuntu VM: 0 duplicate, 0 stale, 100% final completeness,
   100% Normal Update Coverage, median P95 caption age 2.35 ms.
 
-## Remaining (other owners)
+## Recovery integration status
 
-- P2: serve `HISTORY.since(...)` + `history_message(...)` in `handle_client`,
-  then `STATE.active_snapshot()` as live updates after HISTORY; browser HISTORY
-  merge must call `applyCaption(item)`.
+- `handle_client` serves finalized HISTORY followed by `STATE.active_snapshot()`.
+- Initial messages are admitted before registration with no intervening await;
+  insufficient queue capacity closes the client before any context is sent.
+- HISTORY is limited to the smaller of queue bytes and the client's 1 MiB limit.
+  Older context may be omitted under that budget; chunked recovery is not implemented.
+- Browser HISTORY items use `applyCaption(item)`; full browser recovery validation
+  and semantic overload handling remain pending.

@@ -1,8 +1,8 @@
 # Per-client delivery
 
 Each client has its own queue and sender. A slow send can wait without blocking
-other senders. `solution_server.py` now uses these modules; revision/recovery and
-semantic overload behavior are still incomplete.
+other senders. `solution_server.py` uses them together with caption revision
+state and recovery. Semantic overload handling remains incomplete.
 
 ## Modules
 
@@ -32,7 +32,7 @@ Current server wiring:
 - `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
 - `broadcast_to_queues()` calls `push()` without waiting on socket writes.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
-- Empty HISTORY is queued before registration; real history/recovery is pending.
+- HISTORY and the latest active provisional updates are queued before registration.
 - Default queue caps: 256 messages and 1 MiB of encoded payloads, both provisional.
 - Rejected admission unregisters the client and starts one tracked close task
   (code 1013). The handler awaits/removes that task and its monitor on exit.
@@ -63,27 +63,30 @@ result = queue.push_caption(
 - A coalescing push scans the bounded queue; normal pushes remain constant-time
   apart from UTF-8 byte counting.
 
-Simplified lifecycle example, from the repository root:
+## Recovery initialization
 
-```python
-from delivery.client_queue import ClientQueue, PushResult
-from delivery.client_monitor import ClientMonitor
-from delivery.client_session import run_client_session
+`handle_client()` in `solution_server.py` prepares this FIFO before starting the sender:
 
-clients = {}  # Shared with future broadcast code.
-
-async def client_handler(ws, serialized_history):
-    queue = ClientQueue(max_messages=256, max_bytes=1024 * 1024)
-    if queue.push(serialized_history) is not PushResult.ACCEPTED:
-        queue.close()
-        await ws.close(code=1013, reason="Initial history exceeds queue capacity")
-        return
-    monitor = ClientMonitor()
-    await run_client_session(ws, queue, clients, monitor=monitor)
+```text
+HISTORY (finals only) -> latest active provisional updates -> later live updates
 ```
 
-- Queue sizes above are examples, not tuned settings.
-- Recovery must coordinate HISTORY and registration so live updates are not missed.
+- Resume cursors must be non-negative integers (not booleans).
+- History seconds must be a non-negative finite number; values above 60 are
+  capped at 60. Omitted fields default to cursor 0/0 and 30 seconds.
+- Invalid recovery fields close with code 1008 before creating delivery resources.
+- Each initial message must fit the client's 1 MiB limit, even with a larger queue.
+- The HISTORY budget is `min(queue byte limit, 1 MiB)`. Existing history selection
+  keeps newer context if older items do not fit; this is not chunked recovery.
+- Every initial push must succeed. If the combined count/bytes cannot fit, clear
+  the queue and close with 1013 before registration or sending any partial context.
+- There is no await from context selection through successful registration;
+  source updates cannot interleave and create a history-to-live gap.
+- This does not guarantee all missed finals when history exceeds the byte budget;
+  semantic overload/recovery policy still needs to address that case.
+
+## Lifecycle rules
+
 - Producers check every `push()` result: `ACCEPTED`, `FULL`, `TOO_LARGE` or
   `CLOSED`. Rejected messages are not delivered.
 - On exit, the session unregisters the client, clears the queue, cancels/awaits

@@ -9,20 +9,22 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -v
 ```
 
-All 52 tests passed on Windows on 28 October 2026 with websockets 16.1.1.
+All 101 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
 The original 38 component tests still use only the standard library.
 The code targets Python 3.10+;
 that runtime still needs verification on the team's Ubuntu environment.
 
 | Test | Main checks |
 | --- | --- |
-| `test_client_queue.py` | FIFO, count/byte limits, UTF-8 sizes, wakeup and close |
+| `test_client_queue.py` | FIFO, count/byte limits, UTF-8 sizes, wakeup, close and opt-in provisional replacement |
 | `test_client_sender.py` | Ordered sends, isolation, deadlines, errors and cancellation |
 | `test_client_session.py` | Registry/task cleanup and repeated cancellation |
 | `test_client_monitor.py` | Counters, timing, snapshots and transport availability |
 | `test_client_delivery.py` | 100 controlled peers, ten blocked; one failed session isolated |
 | `test_server_delivery.py` | Real loopback WebSockets: HISTORY-first order, two clients, monitors, disconnect/shutdown cleanup, invalid hello, source replacement, full/oversized queue isolation |
 | `test_server_config.py` | Defaults, CLI/env precedence, invalid capacities/deadlines, and startup wiring |
+| `test_caption_state.py`, `test_history.py`, `test_caption_pipeline.py` | Caption validation, bounded finals history, source-to-client integration |
+| `test_server_recovery.py` | History/active/live ordering, resume filtering, UTF-8/message limits, initial capacity rejection, window validation and join during source updates |
 
 The 100-peer test checks that:
 
@@ -37,6 +39,9 @@ results and do not establish latency, caption completeness or RSS bounds.
 ## Local server checks completed
 
 - `delivery/` is connected to `solution_server.py`; the required startup checker passes.
+- Recovery initialization now queues HISTORY followed by the latest active
+  provisional updates. Twelve new loopback tests cover ordering, message limits,
+  count/byte overflow without partial delivery, and invalid recovery requests.
 - A gated server-side send tests overload deterministically over real sockets;
   it is not a real TCP slow-reader measurement.
 - An eight-second, 20-client smoke run with four source segments delivered
@@ -56,7 +61,8 @@ run ended receivers before all four segments finished and is not completeness ev
 
 ## Integration still needed
 
-- Integrate revision state, gap-free recovery and semantic overload handling.
+- Validate browser reconnect, local recall and HISTORY merge end to end.
+- Integrate semantic overload handling and recovery beyond a single HISTORY budget.
 - Verify final-caption preservation during overload/reconnect.
 
 ## Ubuntu T3 (not run yet)
