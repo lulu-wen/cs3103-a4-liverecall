@@ -90,8 +90,8 @@ Covers spec section 3 #1, #2, #7 (server side), #8 and section 4.1. Code:
 
 ## Verification
 
-- `python -m unittest discover tests`: `test_caption_state.py` (17),
-  `test_history.py` (10), `test_caption_pipeline.py` (2 loopback tests through
+- `python -m unittest discover -s tests -t .`: `tests/captions/test_caption_state.py` (17),
+  `tests/captions/test_history.py` (10), `tests/server/test_caption_pipeline.py` (2 loopback tests through
   the real server), plus the existing delivery tests.
 - Headless-browser check (two tabs, real server and `caption_source.py`):
   12 segments -> 12 lines, all final, provisional visible mid-stream; injected

@@ -6,25 +6,25 @@ From the repository root (activate your virtual environment):
 
 ```bash
 pip install -r requirements.txt
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -t . -v
 ```
 
-All 104 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
+All 108 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
 The original 38 component tests still use only the standard library.
 The code targets Python 3.10+;
 that runtime still needs verification on the team's Ubuntu environment.
 
 | Test | Main checks |
 | --- | --- |
-| `test_client_queue.py` | FIFO, count/byte limits, UTF-8 sizes, wakeup, close and opt-in provisional replacement |
-| `test_client_sender.py` | Ordered sends, isolation, deadlines, errors and cancellation |
-| `test_client_session.py` | Registry/task cleanup and repeated cancellation |
-| `test_client_monitor.py` | Counters, timing, snapshots and transport availability |
-| `test_client_delivery.py` | 100 controlled peers, isolation, coalescing with an in-flight send, normal revision coverage and rejected replacement |
-| `test_server_delivery.py` | Real loopback WebSockets: HISTORY-first order, two clients, monitors, disconnect/shutdown cleanup, invalid hello, source replacement, full/oversized queue isolation |
-| `test_server_config.py` | Defaults, CLI/env precedence, invalid capacities/deadlines, and startup wiring |
-| `test_caption_state.py`, `test_history.py`, `test_caption_pipeline.py` | Caption validation, bounded finals history, source-to-client integration |
-| `test_server_recovery.py` | History/active/live ordering, resume filtering, UTF-8/message limits, initial capacity rejection, window validation and join during source updates |
+| `tests/delivery/test_client_queue.py` | FIFO, count/byte limits, UTF-8 sizes, wakeup, close and opt-in provisional replacement |
+| `tests/delivery/test_client_sender.py` | Ordered sends, isolation, deadlines, errors and cancellation |
+| `tests/delivery/test_client_session.py` | Registry/task cleanup and repeated cancellation |
+| `tests/delivery/test_client_monitor.py` | Counters, timing, snapshots and transport availability |
+| `tests/delivery/test_client_delivery.py` | 100 controlled peers, isolation, coalescing with an in-flight send, normal revision coverage and rejected replacement |
+| `tests/server/test_server_delivery.py` | Real loopback WebSockets: HISTORY-first order, two clients, monitors, disconnect/shutdown cleanup, invalid hello, source replacement, full/oversized queue isolation |
+| `tests/server/test_server_config.py` | Defaults, CLI/env precedence, invalid capacities/deadlines, and startup wiring |
+| `tests/captions/test_caption_state.py`, `tests/captions/test_history.py`, `tests/server/test_caption_pipeline.py` | Caption validation, bounded finals history, source-to-client integration |
+| `tests/server/test_server_recovery.py` | History/active/live ordering, resume filtering, UTF-8/message limits, initial capacity rejection, window validation and join during source updates |
 
 The 100-peer test checks that:
 
@@ -47,6 +47,10 @@ These tests invoke `push_caption()` directly. The server overload policy is
 not wired yet, and failed admission does not imply successful recovery.
 
 ## Local server checks completed
+
+- Four additional edge scenarios cover revision bursts, blocked-sender churn,
+  ten-second reconnect and recovery after queue-full eviction. See the
+  [test index](../../tests/README.md) for groups, commands and limitations.
 
 - `delivery/` is connected to `solution_server.py`; the required startup checker passes.
 - Recovery initialization now queues HISTORY followed by the latest active
