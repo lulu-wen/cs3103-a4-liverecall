@@ -39,8 +39,10 @@ semantic overload handling and final-version performance evidence remain pending
 
 ## Evidence and remaining work
 
-- All 101 local tests passed on 31 October 2026, including twelve new recovery
+- All 104 local tests passed on 31 October 2026, including twelve new recovery
   initialization tests through real loopback WebSockets.
+- Three controlled-peer tests cover coalescing with an in-flight send, normal
+  revision delivery and preservation of the backlog after rejected replacement.
 - With 100 controlled peers and ten blocked sends, normal senders continue;
   slow queues reject at their limits and accepted data drains in order later.
 - Tests check registry/task cleanup and isolation of a failed session.
