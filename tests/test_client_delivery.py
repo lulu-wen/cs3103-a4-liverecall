@@ -60,14 +60,108 @@ class ClientDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
         await asyncio.wait_for(poll(), 5)
 
-    def start_client(self, ws):
-        queue = ClientQueue(max_messages=4, max_bytes=256)
+    def start_client(self, ws, *, max_messages=4, max_bytes=256):
+        queue = ClientQueue(max_messages=max_messages, max_bytes=max_bytes)
         monitor = ClientMonitor()
         task = asyncio.create_task(run_client_session(
             ws, queue, self.clients, monitor=monitor, send_timeout=30
         ))
         self.tasks.append(task)
         return queue, monitor, task
+
+    async def test_coalescing_preserves_in_flight_revision_and_final_delivery(self):
+        slow = ControlledConnection(blocked=True)
+        healthy = ControlledConnection()
+        queue, monitor, task = self.start_client(slow, max_bytes=1024)
+        healthy_queue, healthy_monitor, healthy_task = self.start_client(healthy)
+
+        def caption(segment, revision, final=False):
+            return json.dumps({
+                "type": "CAPTION_UPDATE", "segment": segment,
+                "revision": revision, "final": final,
+                "text": "\u5b57\u5e55", "source_ts": 100.0,
+            }, ensure_ascii=False)
+
+        first = caption(1, 1)
+        self.assertEqual(queue.push_caption(
+            first, segment=1, revision=1, final=False,
+        ), PushResult.ACCEPTED)
+        await self.wait_until(lambda: monitor.snapshot(queue, slow).in_flight)
+        self.assertEqual(queue.stats().depth, 0)
+
+        queue.push_caption(caption(1, 2), segment=1, revision=2, final=False)
+        other_final = caption(2, 1, True)
+        queue.push_caption(other_final, segment=2, revision=1, final=True)
+        queue.push_caption(caption(1, 3), segment=1, revision=3, final=False)
+        latest_final = caption(1, 4, True)
+        self.assertEqual(queue.push_caption(
+            latest_final, segment=1, revision=4, final=True, coalesce=True,
+        ), PushResult.ACCEPTED)
+        stats = monitor.snapshot(queue, slow)
+        self.assertEqual(stats.queue.depth, 2)
+        self.assertEqual(stats.queue.pending_bytes,
+                         len((other_final + latest_final).encode("utf-8")))
+        self.assertEqual(stats.in_flight_bytes, len(first.encode("utf-8")))
+
+        healthy_queue.push("healthy update")
+        await self.wait_until(lambda: healthy_monitor.snapshot(
+            healthy_queue, healthy,
+        ).sent_messages == 1)
+        self.assertEqual(healthy.messages, ["healthy update"])
+        self.assertEqual(slow.messages, [])
+
+        slow.release.set()
+        await self.wait_until(lambda: monitor.snapshot(queue, slow).sent_messages == 3)
+        self.assertEqual(slow.messages, [first, other_final, latest_final])
+        stats = monitor.snapshot(queue, slow)
+        self.assertEqual(stats.sent_payload_bytes,
+                         sum(len(payload.encode("utf-8")) for payload in slow.messages))
+        self.assertEqual(stats.queue.pending_bytes, 0)
+        self.assertFalse(stats.in_flight)
+        slow.closed.set()
+        healthy.closed.set()
+        await asyncio.wait_for(asyncio.gather(task, healthy_task), 5)
+
+    async def test_normal_mode_sends_history_and_every_caption_revision(self):
+        ws = ControlledConnection(blocked=True)
+        queue, monitor, task = self.start_client(ws, max_bytes=1024)
+        history = '{"type":"HISTORY","items":[]}'
+        queue.push(history)
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).in_flight)
+        expected = [history]
+        for revision in (1, 2, 3):
+            payload = json.dumps({
+                "type": "CAPTION_UPDATE", "segment": 1,
+                "revision": revision, "final": revision == 3,
+                "text": "caption", "source_ts": 100.0,
+            })
+            self.assertEqual(queue.push_caption(
+                payload, segment=1, revision=revision, final=revision == 3,
+            ), PushResult.ACCEPTED)
+            expected.append(payload)
+        ws.release.set()
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).sent_messages == 4)
+        self.assertEqual(ws.messages, expected)
+        ws.closed.set()
+        await asyncio.wait_for(task, 5)
+
+    async def test_rejected_replacement_still_sends_original_backlog(self):
+        ws = ControlledConnection(blocked=True)
+        queue, monitor, task = self.start_client(ws, max_messages=1, max_bytes=64)
+        queue.push("in flight")
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).in_flight)
+        old = '{"segment":1,"revision":1,"final":false}'
+        queue.push_caption(old, segment=1, revision=1, final=False)
+        # The replacement itself cannot fit, so the old caption must survive.
+        self.assertEqual(queue.push_caption(
+            "x" * 65, segment=1, revision=2, final=True, coalesce=True,
+        ), PushResult.TOO_LARGE)
+        self.assertEqual(queue.stats().pending_bytes, len(old))
+        ws.release.set()
+        await self.wait_until(lambda: monitor.snapshot(queue, ws).sent_messages == 2)
+        self.assertEqual(ws.messages, ["in flight", old])
+        ws.closed.set()
+        await asyncio.wait_for(task, 5)
 
     async def test_100_clients_with_10_blocked_readers_and_recovery(self):
         connections = []

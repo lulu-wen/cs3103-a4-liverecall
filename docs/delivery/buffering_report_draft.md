@@ -1,7 +1,7 @@
 # Report draft: buffering and slow-client isolation
 
-Notes for the shared report. Basic delivery wiring is in place; semantic
-overload/recovery integration and Ubuntu results are pending.
+Notes for the shared report. Delivery and initial recovery are wired together;
+semantic overload handling and final-version performance evidence remain pending.
 
 ## Design
 
@@ -9,6 +9,8 @@ overload/recovery integration and Ubuntu results are pending.
 - The producer enqueues without waiting for network writes.
 - Each sender sends accepted messages in FIFO order and yields between sends.
 - Tasks share one asyncio event loop; no OS thread is created per client.
+- Before registration, queue finalized HISTORY then current provisional snapshots
+  without yielding. Reject the whole initial context if any admission fails.
 
 ## Limits and trade-offs
 
@@ -23,6 +25,9 @@ overload/recovery integration and Ubuntu results are pending.
   overload-policy review, not measured optimal values.
 - Queue limits and deadlines can be set by CLI/env; startup logs the effective
   settings so experiment configurations can be recorded without editing code.
+- Initial messages respect the client's 1 MiB receive limit. HISTORY still keeps
+  only the newest context fitting its budget; complete oversized recovery remains
+  a limitation rather than a final-delivery guarantee.
 
 ## Cleanup and monitoring
 
@@ -34,14 +39,16 @@ overload/recovery integration and Ubuntu results are pending.
 
 ## Evidence and remaining work
 
-- All 52 local tests passed on 28 October 2026, including real loopback WebSockets
-  and CLI/environment configuration checks.
+- All 104 local tests passed on 31 October 2026, including twelve new recovery
+  initialization tests through real loopback WebSockets.
+- Three controlled-peer tests cover coalescing with an in-flight send, normal
+  revision delivery and preservation of the backlog after rejected replacement.
 - With 100 controlled peers and ten blocked sends, normal senders continue;
   slow queues reject at their limits and accepted data drains in order later.
 - Tests check registry/task cleanup and isolation of a failed session.
 - A local 20-client smoke check delivered 80/80 finals and 240/240 revisions;
   this single short Windows run is not a formal public performance result.
-- Ubuntu T3, RSS trends and baseline comparison remain unmeasured. Add those
-  results before making performance claims.
+- Re-run Ubuntu tests, RSS observations and baseline comparison on the completed
+  implementation before making final performance claims.
 
 Use the [experiment plan](delivery_test_plan.md) to collect missing evidence.

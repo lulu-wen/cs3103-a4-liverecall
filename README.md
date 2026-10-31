@@ -10,9 +10,9 @@ caption_source.py -> solution_server.py -> browser clients
 ```
 
 - **Caption source:** the supplied deterministic generator produces revisions.
-- **Server:** distributes captions and will manage revision state, recent history
-  and recovery.
-- **Browser:** displays captions and will provide local recall and auto-reconnect.
+- **Server:** validates revisions, stores recent finals and serves recovery
+  context before live delivery.
+- **Browser:** displays revisions, keeps local recall and reconnects automatically.
 - **Delivery package:** bounded per-client queues, senders, cleanup and monitoring.
 
 ## Current status
@@ -20,10 +20,12 @@ caption_source.py -> solution_server.py -> browser clients
 - The server now uses bounded per-client queues, senders, cleanup and monitoring.
 - Source updates pass through revision state (stale, duplicate, after-final and
   malformed updates are dropped) and finals are kept in a bounded 90 s history
-  (`captions/`). HISTORY sent to clients is still empty until recovery is integrated.
+  (`captions/`). Joining/resuming clients receive HISTORY, then the latest active
+  provisional state, before later live updates.
 - The browser shows one line per segment, replaces revisions in place and
-  distinguishes provisional from final captions. Reconnect, recovery, recall and
-  semantic overload handling remain to integrate.
+  distinguishes provisional from final captions. Local recall, HISTORY merge and
+  fixed-delay reconnect are implemented; full browser recovery validation and
+  semantic overload handling remain pending.
 - A rejected queue push temporarily closes that client with code 1013; this
   fallback does not guarantee delivery/recovery of finals under overload.
 - Local tests pass; Ubuntu public performance results are pending.

@@ -103,5 +103,92 @@ class ClientQueueTests(unittest.IsolatedAsyncioTestCase):
             queue.push({"final": True})
 
 
+class CaptionQueueTests(unittest.IsolatedAsyncioTestCase):
+    async def test_normal_mode_keeps_all_revisions(self):
+        queue = ClientQueue(max_messages=3, max_bytes=100)
+        for rev in (1, 2, 3):
+            self.assertEqual(queue.push_caption(
+                str(rev), segment=1, revision=rev, final=rev == 3,
+            ), PushResult.ACCEPTED)
+        self.assertEqual([await queue.get() for _ in range(3)], ["1", "2", "3"])
+
+    async def test_coalescing_keeps_history_other_segments_and_finals_in_order(self):
+        queue = ClientQueue(max_messages=5, max_bytes=100)
+        queue.push("HISTORY")
+        queue.push_caption("old1", segment=1, revision=1, final=False)
+        queue.push_caption("other", segment=2, revision=1, final=False)
+        queue.push_caption("old2", segment=1, revision=2, final=False)
+        queue.push_caption("final3", segment=3, revision=1, final=True)
+        self.assertEqual(queue.push_caption(
+            "final1", segment=1, revision=3, final=True, coalesce=True,
+        ), PushResult.ACCEPTED)
+        self.assertEqual(queue.stats().depth, 4)
+        self.assertEqual(queue.stats().pending_bytes, len("HISTORYotherfinal3final1"))
+        self.assertEqual([await queue.get() for _ in range(4)],
+                         ["HISTORY", "other", "final3", "final1"])
+
+    async def test_coalescing_releases_utf8_byte_capacity(self):
+        queue = ClientQueue(max_messages=2, max_bytes=6)
+        queue.push_caption("\u4f60", segment=1, revision=1, final=False)
+        queue.push(b"abc")
+        self.assertEqual(queue.push_caption(
+            "\u597d", segment=1, revision=2, final=False, coalesce=True,
+        ), PushResult.ACCEPTED)
+        self.assertEqual(queue.stats().pending_bytes, 6)
+        self.assertEqual(await queue.get(), b"abc")
+        self.assertEqual(await queue.get(), "\u597d")
+        self.assertEqual(queue.stats().pending_bytes, 0)
+
+    async def test_failed_replacement_keeps_old_provisional(self):
+        queue = ClientQueue(max_messages=2, max_bytes=6)
+        queue.push_caption("a", segment=1, revision=1, final=False)
+        queue.push("12345")
+        for payload, expected in (("bb", PushResult.FULL), ("1234567", PushResult.TOO_LARGE)):
+            self.assertEqual(queue.push_caption(
+                payload, segment=1, revision=2, final=True, coalesce=True,
+            ), expected)
+            self.assertEqual(queue.stats().depth, 2)
+            self.assertEqual(queue.stats().pending_bytes, 6)
+        self.assertEqual(await queue.get(), "a")
+        self.assertEqual(await queue.get(), "12345")
+
+    async def test_cannot_reclaim_final_or_another_segments_latest_revision(self):
+        for segment, final in ((1, True), (2, False)):
+            with self.subTest(segment=segment, final=final):
+                queue = ClientQueue(max_messages=1, max_bytes=100)
+                queue.push_caption("keep", segment=segment, revision=1, final=final)
+                self.assertEqual(queue.push_caption(
+                    "new", segment=1, revision=2, final=True, coalesce=True,
+                ), PushResult.FULL)
+                self.assertEqual(await queue.get(), "keep")
+
+    async def test_waiter_receives_caption_and_closed_queue_rejects_it(self):
+        queue = ClientQueue(max_messages=1, max_bytes=100)
+        waiter = asyncio.create_task(queue.get())
+        await asyncio.sleep(0)
+        queue.push_caption("new", segment=1, revision=1, final=False, coalesce=True)
+        self.assertEqual(await asyncio.wait_for(waiter, 1), "new")
+        queue.close()
+        self.assertEqual(queue.push_caption(
+            "final", segment=1, revision=2, final=True, coalesce=True,
+        ), PushResult.CLOSED)
+
+    async def test_replacement_age_starts_at_new_admission(self):
+        queue = ClientQueue(max_messages=1, max_bytes=100)
+        with patch("delivery.client_queue.monotonic", side_effect=[10.0, 20.0, 23.0]):
+            queue.push_caption("old", segment=1, revision=1, final=False)
+            queue.push_caption("new", segment=1, revision=2, final=False, coalesce=True)
+            self.assertEqual(queue.stats().oldest_pending_seconds, 3.0)
+
+    async def test_invalid_metadata_does_not_change_queue(self):
+        queue = ClientQueue(max_messages=1, max_bytes=100)
+        valid = dict(segment=1, revision=1, final=False, coalesce=True)
+        for field, value in (("segment", True), ("revision", 0), ("final", 1), ("coalesce", 1)):
+            with self.subTest(field=field):
+                with self.assertRaises((TypeError, ValueError)):
+                    queue.push_caption("x", **(valid | {field: value}))
+        self.assertEqual(queue.stats().depth, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

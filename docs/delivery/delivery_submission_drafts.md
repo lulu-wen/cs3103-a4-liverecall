@@ -7,8 +7,8 @@ Notes to merge into final root-level documents; these do not replace them.
 - Modules live in `delivery/`; import through the package:
   `from delivery.client_queue import ClientQueue`.
 - Entry point: `python solution_server.py --port 8765`.
-- Public runs now exercise the integrated delivery path; revision/history and
-  semantic overload policies remain incomplete.
+- Public runs exercise revision state, history and the integrated delivery path;
+  semantic overload handling remains incomplete.
 - See [interfaces](client_delivery.md), [tests](delivery_test_plan.md) and the
   [project checklist](../project_checklist.md).
 
@@ -31,7 +31,10 @@ Notes to merge into final root-level documents; these do not replace them.
 - **Work:** bounded queue, sender, cleanup, monitor and independent tests.
 - **Writing:** buffering/isolation report section and documentation compilation.
 - **Work added:** server wiring and real loopback WebSocket regression tests.
-- **Pending:** semantic recovery/overload integration, Ubuntu T3/RSS and analysis.
+- **Work added:** recovery-to-delivery initialization, active snapshots, initial
+  message/capacity limits and twelve loopback regression tests.
+- **Pending:** oversized recovery/semantic overload policy, final-version Ubuntu
+  T3/RSS experiments and analysis.
 - **Contribution percentage:** team to agree; all members' values must total 100%.
 - Record shared work; do not infer contribution shares from commit counts.
 

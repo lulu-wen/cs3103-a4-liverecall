@@ -6,7 +6,6 @@ Each student connection has a bounded queue, independent sender, lifecycle
 supervision and monitor. Source updates pass through revision state
 (captions.state) and finals are kept in bounded history (captions.history).
 Still incomplete; these mechanisms remain to integrate:
-  - serving recent history on reconnect / late join (HISTORY is still empty)
   - semantic coalescing / backpressure
   - constrained-bandwidth overload handling
 
@@ -40,6 +39,9 @@ QUEUE_MAX_MESSAGES = 256
 QUEUE_MAX_BYTES = 1024 * 1024
 CLIENT_SEND_TIMEOUT = 10.0
 CLIENT_CLOSE_TIMEOUT = 3.0
+# Public load clients accept WebSocket messages up to 1 MiB after decompression.
+CLIENT_MAX_MESSAGE_BYTES = 2**20
+MAX_RECOVERY_SECONDS = 60.0
 
 # Recovery history bounds (P1). The spec requires >= 60 s; the margin covers
 # a client evicted for overload plus its reconnect time.
@@ -155,23 +157,46 @@ async def handle_source(ws, hello: dict[str, Any]) -> None:
 
 async def handle_client(ws, hello: dict[str, Any]) -> None:
     client_id = hello.get("client_id")
-    client_last_segment = hello.get("last_segment")
-    client_last_revision = hello.get("last_revision")
-    client_history_seconds = hello.get("history_seconds")
+    client_last_segment = hello.get("last_segment", 0)
+    client_last_revision = hello.get("last_revision", 0)
+    client_history_seconds = hello.get("history_seconds", 30)
+    # Validate before querying history; bool is not a valid integer cursor.
+    valid_cursor = all(
+        type(value) is int and value >= 0
+        for value in (client_last_segment, client_last_revision)
+    )
+    valid_window = (
+        type(client_history_seconds) in (int, float)
+        and client_history_seconds >= 0
+        and (type(client_history_seconds) is int or math.isfinite(client_history_seconds))
+    )
+    if not valid_cursor or not valid_window:
+        await ws.close(code=1008, reason="Invalid recovery cursor or history window")
+        return
+    client_history_seconds = min(client_history_seconds, MAX_RECOVERY_SECONDS)
 
-
-    # Queue HISTORY before live updates; it is still empty until recovery is implemented.
+    # Prepare one FIFO: finalized context first, then current provisional state.
+    # No await until registration, so source updates cannot slip into this gap.
     queue = ClientQueue(max_messages=QUEUE_MAX_MESSAGES, max_bytes=QUEUE_MAX_BYTES)
     items = HISTORY.since(
-        last_segment = client_last_segment,
-        last_revision = client_last_revision,
-        seconds = client_history_seconds,
-        max_bytes = QUEUE_MAX_BYTES,
+        last_segment=client_last_segment,
+        last_revision=client_last_revision,
+        seconds=client_history_seconds,
+        max_bytes=min(QUEUE_MAX_BYTES, CLIENT_MAX_MESSAGE_BYTES),
     )
-    result = queue.push(history_message(items));
+    initial_messages = [history_message(items), *STATE.active_snapshot()]
+    for message in initial_messages:
+        if len(message.encode("utf-8")) > CLIENT_MAX_MESSAGE_BYTES:
+            result = PushResult.TOO_LARGE
+        else:
+            result = queue.push(message)
+        if result is not PushResult.ACCEPTED:
+            break
     if result is not PushResult.ACCEPTED:
+        # No sender has started: discard the whole batch, never send a partial
+        # initial context or register a client with a missing active snapshot.
         queue.close()
-        await ws.close(code=1013, reason="Initial history exceeds queue capacity")
+        await ws.close(code=1013, reason="Initial context exceeds delivery limits")
         return
 
     monitor = ClientMonitor()

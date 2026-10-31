@@ -160,13 +160,15 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 
 - [x] Implement and independently test bounded queue, sender, lifecycle cleanup
   and monitoring modules in `delivery/`.
-- [x] Pass 52 local component/integration/configuration tests, including 100 controlled
+- [x] Pass 104 local component/integration/configuration tests, including 100 controlled
   connections with ten blocked senders and real loopback server tests.
   These are not Ubuntu public-test results.
 - [x] Implement and test revision state and bounded history in `captions/`
   (unit tests plus loopback tests through the real server; see
-  [docs/state/caption_state.md](state/caption_state.md)). Bounded history is
-  kept but not yet served to clients, so item 8 stays open until recovery uses it.
+  [docs/state/caption_state.md](state/caption_state.md)). History is now served;
+  full recovery coverage under stress still needs validation.
+- [x] Test HISTORY -> active snapshot -> live ordering, client message limits,
+  atomic initial admission and recovery-field validation through loopback WebSockets.
 - [ ] Run `python submission_check.py --final` on the final Ubuntu submission;
   this checks compatibility, not full correctness/performance.
 
