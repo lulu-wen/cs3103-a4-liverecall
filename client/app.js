@@ -161,6 +161,18 @@ function applyCaption(msg) {
 
 let ws;
 
+// Shown when the server drops this client for falling behind the live stream:
+// 1011 "keepalive ping timeout" (our pong was stuck behind unread captions) or
+// 1013 (our outgoing queue overflowed). Hidden once the reconnect's HISTORY
+// has been merged.
+const fellBehindEl = document.getElementById("fell-behind");
+let catchingUp = false;
+
+function droppedForFallingBehind(event) {
+  return event.code === 1013
+    || (event.code === 1011 && /keepalive/i.test(event.reason || ""));
+}
+
 function numericClientId() {
   const key = "liverecall-client-id";
   let value = sessionStorage.getItem(key);
@@ -215,15 +227,27 @@ function connect() {
       applyCaption(msg);
     } else if (msg.type === "HISTORY") {
       //merge history via applyCaption(item) for each item, and add accepted finals to the local recall store in applycaption.
+      let recovered = 0;
       for(const item of msg.items || []) {
-        applyCaption(item); 
+        if (applyCaption(item) === "accepted") recovered += 1;
+      }
+      if (catchingUp) {
+        catchingUp = false;
+        fellBehindEl.hidden = true;
+        statusEl.textContent = `connected (caught up: recovered ${recovered} captions)`;
       }
     }
   });
 
-  ws.addEventListener("close", () => {
+  ws.addEventListener("close", (event) => {
     // TODO: automatic reconnect after a short delay, using finalized resume state.
-    statusEl.textContent = "disconnected, reconnecting in 3s...";
+    if (droppedForFallingBehind(event)) {
+      catchingUp = true;
+      fellBehindEl.hidden = false;
+      statusEl.textContent = "fell behind, reconnecting in 3s...";
+    } else {
+      statusEl.textContent = "disconnected, reconnecting in 3s...";
+    }
     setTimeout(() => {
       connect();
     }, 3000);

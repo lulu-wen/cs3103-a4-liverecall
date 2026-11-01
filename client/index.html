@@ -28,6 +28,18 @@
     }
     .legend { font-size: .85rem; color: #555; }
     .legend .caption { display: inline; }
+
+    /* Pop-up shown while reconnecting after the server dropped a client that fell behind. */
+    #fell-behind {
+      position: fixed; inset: 0; z-index: 10; display: flex;
+      align-items: center; justify-content: center; background: rgba(0,0,0,.35);
+    }
+    #fell-behind[hidden] { display: none; }
+    #fell-behind .card {
+      max-width: 22rem; margin: 1rem; padding: 1.25rem 1.5rem; border-radius: .6rem;
+      background: #fff; box-shadow: 0 4px 18px rgba(0,0,0,.3); text-align: center;
+    }
+    #fell-behind .card strong { display: block; margin-bottom: .4rem; font-size: 1.1rem; }
   </style>
 </head>
 <body>
@@ -47,6 +59,12 @@
     <button data-seconds="60">60 s</button>
   </div>
   <div id="recall">TODO: implement the locally maintained recall view.</div>
+  <div id="fell-behind" role="alertdialog" aria-live="assertive" aria-labelledby="fell-behind-title" hidden>
+    <div class="card">
+      <strong id="fell-behind-title">Reconnecting&hellip;</strong>
+      You fell behind the live captions. Reconnecting and catching up on what you missed.
+    </div>
+  </div>
   <script src="app.js"></script>
 </body>
 </html>

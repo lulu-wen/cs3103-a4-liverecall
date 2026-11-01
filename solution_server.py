@@ -48,6 +48,17 @@ NAIVE_DELIVERY = False
 # Experiment-only artificial delay before each client send; default grading path is zero.
 EXPERIMENT_SEND_DELAY = 0.0
 
+# Built-in WebSocket keepalive, tightened to drop clients that fall behind.
+# A slow reader's backlog sits in its own buffers, where our queue and send
+# times cannot see it. A pong, however, can only come back after the client
+# has read every frame sent before the ping, so a client more than about
+# KEEPALIVE_TIMEOUT seconds behind is closed by the library (code 1011,
+# "keepalive ping timeout"). It reconnects with its resume cursor and gets the
+# finals it missed in one HISTORY message. These pings replace the library's
+# default 20 s keepalive rather than adding traffic.
+KEEPALIVE_INTERVAL = 2.0
+KEEPALIVE_TIMEOUT = 5.0
+
 # Recovery history bounds (P1). The spec requires >= 60 s; the margin covers
 # a client evicted for overload plus its reconnect time.
 HISTORY_WINDOW_SECONDS = 90.0
@@ -245,6 +256,8 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
     except (ConnectionClosed, asyncio.TimeoutError, OSError) as exc:
         print(f"client send ended: id={client_id}; reason={exc!r}", flush=True)
     finally:
+        if dropped_for_lag(ws):
+            print(f"client dropped (fell behind, keepalive timeout): id={client_id}", flush=True)
         # The session handles CLIENTS, queue and sender; remove server-owned extras here.
         if MONITORS.get(ws) is monitor:
             del MONITORS[ws]
@@ -254,6 +267,13 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
             # The close task was already scheduled; wait for it rather than starting it here.
             await close_task
         print(f"client disconnected: id={client_id}; clients={len(CLIENTS)}", flush=True)
+
+
+def dropped_for_lag(ws) -> bool:
+    """True if the library closed this connection because its pong timed out."""
+    sent = getattr(getattr(ws, "protocol", None), "close_sent", None)
+    return (sent is not None and sent.code == 1011
+            and "keepalive" in (sent.reason or ""))
 
 
 async def handler(ws) -> None:
@@ -280,21 +300,24 @@ async def handler(ws) -> None:
         await ws.close(code=1008, reason="Expected SOURCE_HELLO or CLIENT_HELLO")
 
 
+def server_options() -> dict[str, Any]:
+    """Keyword arguments for websockets.serve(), shared by main_async and tests."""
+    return {
+        "max_size": 2**20,
+        "ping_interval": KEEPALIVE_INTERVAL,
+        "ping_timeout": KEEPALIVE_TIMEOUT,
+        "close_timeout": CLIENT_CLOSE_TIMEOUT,
+    }
+
+
 async def main_async(port: int) -> None:
-    async with serve(
-        handler,
-        "0.0.0.0",
-        port,
-        max_size=2**20,
-        ping_interval=20,
-        ping_timeout=20,
-        close_timeout=CLIENT_CLOSE_TIMEOUT,
-    ):
+    async with serve(handler, "0.0.0.0", port, **server_options()):
         print(f"LiveRecall listening on ws://0.0.0.0:{port}", flush=True)
         print(
             f"Delivery settings: queue_max_messages={QUEUE_MAX_MESSAGES}; "
             f"queue_max_bytes={QUEUE_MAX_BYTES}; "
             f"send_timeout={CLIENT_SEND_TIMEOUT}s; close_timeout={CLIENT_CLOSE_TIMEOUT}s; "
+            f"keepalive={KEEPALIVE_INTERVAL}s/{KEEPALIVE_TIMEOUT}s; "
             f"overload_policy={'naive' if NAIVE_DELIVERY else 'semantic'}; "
             f"experiment_send_delay_ms={EXPERIMENT_SEND_DELAY * 1000:.1f}",
             flush=True,
@@ -372,12 +395,23 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.getenv("LIVERECALL_CLOSE_TIMEOUT", CLIENT_CLOSE_TIMEOUT),
         help="Seconds allowed per close attempt; env: LIVERECALL_CLOSE_TIMEOUT",
     )
+    parser.add_argument(
+        "--keepalive-interval", type=positive_seconds,
+        default=os.getenv("LIVERECALL_KEEPALIVE_INTERVAL", KEEPALIVE_INTERVAL),
+        help="Seconds between keepalive pings; env: LIVERECALL_KEEPALIVE_INTERVAL",
+    )
+    parser.add_argument(
+        "--keepalive-timeout", type=positive_seconds,
+        default=os.getenv("LIVERECALL_KEEPALIVE_TIMEOUT", KEEPALIVE_TIMEOUT),
+        help="Drop a client whose pong is this late (it fell behind); "
+             "env: LIVERECALL_KEEPALIVE_TIMEOUT",
+    )
     return parser
 
 
 def main() -> None:
     global QUEUE_MAX_MESSAGES, QUEUE_MAX_BYTES, CLIENT_SEND_TIMEOUT, CLIENT_CLOSE_TIMEOUT
-    global NAIVE_DELIVERY, EXPERIMENT_SEND_DELAY
+    global NAIVE_DELIVERY, EXPERIMENT_SEND_DELAY, KEEPALIVE_INTERVAL, KEEPALIVE_TIMEOUT
     parser = build_parser()
     args = parser.parse_args()
     # Set once before the event loop starts; all handlers use the same settings.
@@ -387,6 +421,8 @@ def main() -> None:
     CLIENT_CLOSE_TIMEOUT = args.close_timeout
     NAIVE_DELIVERY = args.naive
     EXPERIMENT_SEND_DELAY = args.experiment_send_delay_ms
+    KEEPALIVE_INTERVAL = args.keepalive_interval
+    KEEPALIVE_TIMEOUT = args.keepalive_timeout
     try:
         asyncio.run(main_async(args.port))
     except KeyboardInterrupt:
