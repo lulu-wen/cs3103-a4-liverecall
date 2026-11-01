@@ -22,6 +22,9 @@ caption_source.py -> solution_server.py -> browser clients
   malformed updates are dropped) and finals are kept in a bounded 90 s history
   (`captions/`). Joining/resuming clients receive HISTORY, then the latest active
   provisional state, before later live updates.
+- A client that falls behind (its keepalive pong is more than 5 s late) is
+  dropped by the server and reconnects with its resume cursor; the browser shows
+  a "Reconnecting" pop-up while it catches up.
 - The browser shows one line per segment, replaces revisions in place and
   distinguishes provisional from final captions. Local recall, HISTORY merge and
   fixed-delay reconnect are implemented; full browser recovery validation and
@@ -92,6 +95,10 @@ python solution_server.py --port 8765 --queue-max-messages 512 --queue-max-bytes
 
 - Queue limits must be positive integers; bytes count encoded payloads.
 - Timeouts are positive finite seconds and accept fractions.
+- Keepalive: `--keepalive-interval` (default 2 s) and `--keepalive-timeout`
+  (default 5 s) drop clients that fall behind. For a before/after comparison
+  with the unmodified `run_demo.py`, restore the library default:
+  `LIVERECALL_KEEPALIVE_INTERVAL=20 LIVERECALL_KEEPALIVE_TIMEOUT=20 python run_demo.py ...`
 - Priority: CLI argument > `LIVERECALL_*` environment variable > default.
 - Startup prints the settings actually used. See the
   [configuration guide](docs/delivery/client_delivery.md#experiment-settings)

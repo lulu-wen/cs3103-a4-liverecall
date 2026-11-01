@@ -64,7 +64,8 @@ Covers spec section 3 #1, #2, #7 (server side), #8 and section 4.1. Code:
 - `since(last_segment, last_revision, seconds=None, max_bytes=None)`:
   finals the client has not reported, oldest first.
   - `seconds` optionally limits to finals received in the last `seconds`
-    (`<= 0` returns nothing). How it applies to resuming clients is P2's decision.
+    (`<= 0` returns nothing). `handle_client` passes `min(history_seconds, 60)`
+    for every client, fresh or resuming.
   - `max_bytes` bounds the complete HISTORY message; if items do not fit, the
     **oldest** are dropped so the client keeps the most recent context. Pass the
     smaller of the client queue byte limit and the clients' 1 MiB message limit.

@@ -275,5 +275,94 @@ class ServerRecoveryTests(unittest.IsolatedAsyncioTestCase):
             release.set()
 
 
+class KeepaliveDropTests(unittest.IsolatedAsyncioTestCase):
+    """A client that stops reading is dropped by the tightened keepalive."""
+
+    async def asyncSetUp(self):
+        app.reset_caption_state()
+        self.stack = AsyncExitStack()
+        settings = patch.multiple(app, KEEPALIVE_INTERVAL=0.1, KEEPALIVE_TIMEOUT=0.3,
+                                  CLIENT_CLOSE_TIMEOUT=0.2)
+        settings.start()
+        self.addCleanup(settings.stop)
+        # Same serve() options as the real server, just faster timings.
+        self.server = await serve(app.handler, "127.0.0.1", 0, **app.server_options())
+        self.uri = f"ws://127.0.0.1:{self.server.sockets[0].getsockname()[1]}"
+
+    async def asyncTearDown(self):
+        await self.stack.aclose()
+        self.server.close()
+        await asyncio.wait_for(self.server.wait_closed(), 5)
+        await self.wait_until(lambda: not app.CLIENTS and not app.MONITORS)
+        self.assertEqual(app.EVICTIONS, {})
+
+    async def wait_until(self, predicate, timeout=5):
+        async def poll():
+            while not predicate():
+                await asyncio.sleep(0.01)
+        await asyncio.wait_for(poll(), timeout)
+
+    def caption(self, segment, revision, final):
+        return {"type": "CAPTION_UPDATE", "session": "L1", "segment": segment,
+                "revision": revision, "final": final, "source_ts": time.time(),
+                "text": f"s{segment} r{revision} " + "x" * 300}
+
+    async def student(self, client_id, last_segment=0, last_revision=0, **kwargs):
+        ws = await self.stack.enter_async_context(
+            connect(self.uri, close_timeout=0.2, **kwargs))
+        await ws.send(json.dumps({
+            "type": "CLIENT_HELLO", "client_id": client_id, "session": "L1",
+            "last_segment": last_segment, "last_revision": last_revision,
+            "history_seconds": 30,
+        }))
+        return ws
+
+    async def test_stuck_reader_dropped_healthy_reader_unaffected_and_resume_recovers(self):
+        received = []
+
+        async def read_all(ws):
+            async for raw in ws:
+                received.append(json.loads(raw))
+
+        healthy = await self.student(1)
+        reader = asyncio.create_task(read_all(healthy))
+        await self.wait_until(lambda: len(app.CLIENTS) == 1)
+        healthy_server_ws = next(iter(app.CLIENTS))
+        # Never reads: its library stops reading after 2 frames, so the
+        # server's keepalive pings wait unanswered behind the backlog.
+        await self.student(7, max_queue=2)
+        await self.wait_until(lambda: len(app.CLIENTS) == 2)
+        stuck_server_ws = next(ws for ws in app.CLIENTS if ws is not healthy_server_ws)
+
+        source = await self.stack.enter_async_context(connect(self.uri))
+        await source.send('{"type":"SOURCE_HELLO","session":"L1"}')
+        sent = []
+        segment = 0
+        while stuck_server_ws in app.CLIENTS or segment < 5:
+            segment += 1
+            self.assertLess(segment, 200, "stuck client was never dropped")
+            for revision, final in ((1, False), (2, False), (3, True)):
+                sent.append((segment, revision))
+                await source.send(json.dumps(self.caption(segment, revision, final)))
+                await asyncio.sleep(0.01)
+
+        self.assertTrue(app.dropped_for_lag(stuck_server_ws))
+        self.assertIn(healthy_server_ws, app.CLIENTS)
+        # Normal Update Coverage: the healthy reader still got every revision.
+        await self.wait_until(lambda: len(received) == len(sent) + 1)
+        reader.cancel()
+        await asyncio.gather(reader, return_exceptions=True)
+        self.assertEqual(received[0]["type"], "HISTORY")
+        self.assertEqual([(m["segment"], m["revision"]) for m in received[1:]], sent)
+
+        # The dropped client resumes from the last final it processed and
+        # receives every later final in one HISTORY message.
+        resumed = await self.student(7, last_segment=1, last_revision=3)
+        history = json.loads(await asyncio.wait_for(resumed.recv(), 3))
+        self.assertEqual(history["type"], "HISTORY")
+        self.assertEqual([(i["segment"], i["final"]) for i in history["items"]],
+                         [(s, True) for s in range(2, segment + 1)])
+
+
 if __name__ == "__main__":
     unittest.main()
