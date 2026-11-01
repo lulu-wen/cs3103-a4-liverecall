@@ -52,16 +52,6 @@ def default_source_segments(duration, source_start_delay):
     return max(4, math.floor(active / 0.75))
 
 
-def server_command(args):
-    """Build the server command without changing the public workload itself."""
-    cmd = [sys.executable, "-u", "solution_server.py", "--port", str(args.port)]
-    if args.naive_server:
-        cmd.append("--naive")
-    if args.experiment_send_delay_ms:
-        cmd.extend(["--experiment-send-delay-ms", str(args.experiment_send_delay_ms)])
-    return cmd
-
-
 def one_run(args, run_no, here):
     uri = f"ws://127.0.0.1:{args.port}"
     suffix = f"_run{run_no:02d}" if args.runs > 1 else ""
@@ -78,7 +68,7 @@ def one_run(args, run_no, here):
         print(f"Clients={args.clients}, duration={args.duration}s, source segments={segments}")
 
         server = subprocess.Popen(
-            server_command(args),
+            [sys.executable, "-u", "solution_server.py", "--port", str(args.port)],
             cwd=here,
             stdout=subprocess.DEVNULL if args.quiet_server else None,
             stderr=subprocess.STDOUT if args.quiet_server else None,
@@ -192,22 +182,12 @@ def main():
     p.add_argument("--late-seconds", type=float, default=5)
     p.add_argument("--source-start-delay", type=float, default=1.0)
     p.add_argument("--quiet-server", action="store_true")
-    p.add_argument(
-        "--naive-server", action="store_true",
-        help="Start solution_server.py with --naive for before/after experiments",
-    )
-    p.add_argument(
-        "--experiment-send-delay-ms", type=float, default=0.0,
-        help="EXPERIMENT ONLY: pass an artificial per-client sender delay to the server",
-    )
     args = p.parse_args()
 
     if args.runs < 1:
         p.error("--runs must be >= 1")
     if args.duration <= 2:
         p.error("--duration should be > 2 seconds")
-    if not math.isfinite(args.experiment_send_delay_ms) or args.experiment_send_delay_ms < 0:
-        p.error("--experiment-send-delay-ms must be non-negative and finite")
 
     here = Path(__file__).resolve().parent
     for name in ["solution_server.py", "load_clients.py", "caption_source.py", "analyse_results.py"]:
