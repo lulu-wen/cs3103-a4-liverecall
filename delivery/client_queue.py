@@ -74,29 +74,35 @@ class ClientQueue:
 
     def push_caption(
         self, payload: str | bytes, *, segment: int, revision: int,
-        final: bool, coalesce: bool = False,
+        final: bool, coalesce: bool = False, drop_older_segments: bool = False,
     ) -> PushResult:
-        """Admit an already validated caption, optionally replacing older provisionals.
+        """Admit an already validated caption, optionally replacing obsolete provisionals.
 
         Metadata must describe the serialized payload. The upstream caption state
         owns revision validation; this queue neither parses JSON nor keeps a
         second caption history. Normal mode retains every revision. Coalescing
-        removes queued provisionals superseded by a higher revision anywhere
-        in the queue or by this incoming caption, across all segments.
-        Finals, opaque messages and each segment's latest state are preserved. Rejection
-        leaves the entire backlog unchanged, including replaceable revisions.
+        removes only queued, lower revisions of this segment with final=False.
+        With coalesce=True, lower provisional revisions of this segment are
+        replaceable. With drop_older_segments=True, queued provisional updates
+        from lower-numbered segments are also replaceable; this is safe for the
+        required source, which completes each segment before starting the next.
+        Finals and opaque messages are never removed. Rejection leaves the
+        entire backlog unchanged, including replaceable revisions.
         """
         for name, value in (("segment", segment), ("revision", revision)):
             if type(value) is not int or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
-        if type(final) is not bool or type(coalesce) is not bool:
-            raise TypeError("final and coalesce must be booleans")
-        return self._push(payload, segment, revision, final, coalesce)
+        if (type(final) is not bool or type(coalesce) is not bool
+                or type(drop_older_segments) is not bool):
+            raise TypeError("final, coalesce and drop_older_segments must be booleans")
+        return self._push(
+            payload, segment, revision, final, coalesce, drop_older_segments
+        )
 
     def _push(
         self, payload: str | bytes, segment: int | None = None,
         revision: int | None = None, final: bool | None = None,
-        coalesce: bool = False,
+        coalesce: bool = False, drop_older_segments: bool = False,
     ) -> PushResult:
         if not isinstance(payload, (str, bytes)):
             raise TypeError("payload must be serialized str or bytes")
@@ -107,19 +113,19 @@ class ClientQueue:
             return PushResult.TOO_LARGE
         obsolete = []
         if coalesce:
-            # Include the incoming caption without mutating the queue yet.
-            latest_revisions = {segment: revision}
-            for item in self._items:
-                if item.segment is not None:
-                    previous = latest_revisions.get(item.segment, 0)
-                    if item.revision > previous:
-                        latest_revisions[item.segment] = item.revision
-            # A newer queued final can also supersede older provisionals.
-            # Finals themselves and opaque messages are never candidates.
-            for item in self._items:
-                if item.final is False:
-                    if item.revision < latest_revisions[item.segment]:
-                        obsolete.append(item)
+            obsolete = [
+                item for item in self._items
+                if item.final is False
+                and (
+                    (item.segment == segment and item.revision < revision)
+                    or (
+                        drop_older_segments
+                        and item.segment is not None
+                        and segment is not None
+                        and item.segment < segment
+                    )
+                )
+            ]
         removed_bytes = sum(item.size for item in obsolete)
         if (len(self._items) - len(obsolete) >= self._max_messages
                 or self._pending_bytes - removed_bytes + size > self._max_bytes):

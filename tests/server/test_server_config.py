@@ -22,6 +22,20 @@ class ServerConfigTests(unittest.TestCase):
         self.assertEqual(args.queue_max_bytes, 1024 * 1024)
         self.assertEqual(args.send_timeout, 10.0)
         self.assertEqual(args.close_timeout, 3.0)
+        self.assertFalse(args.naive)
+        self.assertEqual(args.experiment_send_delay_ms, 0.0)
+
+    def test_naive_flag_disables_proactive_policy(self):
+        args = app.build_parser().parse_args(["--naive"])
+        self.assertTrue(args.naive)
+
+    def test_experiment_send_delay_parses_milliseconds_to_seconds(self):
+        args = app.build_parser().parse_args(["--experiment-send-delay-ms", "75"])
+        self.assertAlmostEqual(args.experiment_send_delay_ms, 0.075)
+        for bad in ("-1", "nan", "inf", "abc"):
+            with self.subTest(bad=bad), redirect_stderr(io.StringIO()):
+                with self.assertRaises(SystemExit):
+                    app.build_parser().parse_args(["--experiment-send-delay-ms", bad])
 
     def test_explicit_cli_values_and_units(self):
         args = app.build_parser().parse_args([

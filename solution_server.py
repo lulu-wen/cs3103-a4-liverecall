@@ -33,6 +33,7 @@ from captions.state import CaptionState, Event
 from delivery.client_monitor import ClientMonitor, DeliveryStats
 from delivery.client_queue import ClientQueue, PushResult
 from delivery.client_session import run_client_session
+from delivery.overload_policy import OverloadMode, OverloadPolicy
 
 # Provisional integration settings; tune alongside the semantic overload policy.
 QUEUE_MAX_MESSAGES = 256
@@ -42,6 +43,10 @@ CLIENT_CLOSE_TIMEOUT = 3.0
 # Public load clients accept WebSocket messages up to 1 MiB after decompression.
 CLIENT_MAX_MESSAGE_BYTES = 2**20
 MAX_RECOVERY_SECONDS = 60.0
+# P4: optimized semantic overload handling is enabled by default.
+NAIVE_DELIVERY = False
+# Experiment-only artificial delay before each client send; default grading path is zero.
+EXPERIMENT_SEND_DELAY = 0.0
 
 # Recovery history bounds (P1). The spec requires >= 60 s; the margin covers
 # a client evicted for overload plus its reconnect time.
@@ -65,6 +70,8 @@ def reset_caption_state() -> None:
 CLIENTS: dict[Any, ClientQueue] = {}
 # Connection -> delivery monitor.
 MONITORS: dict[Any, ClientMonitor] = {}
+# Connection -> P4 per-client overload policy.
+OVERLOAD_POLICIES: dict[Any, OverloadPolicy] = {}
 # Connection -> overload-close task; prevent duplicates and let handlers await cleanup.
 EVICTIONS: dict[Any, asyncio.Task[None]] = {}
 
@@ -89,26 +96,38 @@ def broadcast_to_queues(event: Event) -> None:
     """Admit updates without awaiting any client's network I/O.
 
     Preserve all revisions while capacity permits. Retry FULL once with
-    queue-wide provisional coalescing before falling back to eviction. Lag detection and
+    same-segment coalescing before falling back to eviction. Lag detection and
     degraded-mode transitions remain the overload policy's responsibility.
     """
     # Snapshot the registry because rejected clients are removed during iteration.
     for ws, queue in list(CLIENTS.items()):
+        # P4 chooses whether P3's existing coalescing mechanism should be active.
+        # In naive mode, preserve the pre-P4 behavior and only coalesce after FULL.
+        coalesce = False
+        policy = OVERLOAD_POLICIES.get(ws)
+        if not NAIVE_DELIVERY and policy is not None:
+            monitor = MONITORS.get(ws)
+            if monitor is not None:
+                mode = policy.update(monitor.snapshot(queue, ws))
+                coalesce = mode is OverloadMode.DEGRADED
+
         # Enqueue without waiting for network I/O; each sender handles delivery.
         result = queue.push_caption(
             event.raw, segment=event.segment, revision=event.revision, final=event.final,
+            coalesce=coalesce, drop_older_segments=coalesce,
         )
         if result is PushResult.FULL:
             # The failed push leaves the backlog intact. Retry atomically,
-            # removing provisionals superseded by newer queued/incoming captions.
+            # removing only older queued provisionals replaced by this event.
             result = queue.push_caption(
                 event.raw, segment=event.segment, revision=event.revision,
-                final=event.final, coalesce=True,
+                final=event.final, coalesce=True, drop_older_segments=True,
             )
         if result is PushResult.ACCEPTED:
             continue
         # Stop admitting updates for this client.
         CLIENTS.pop(ws, None)
+        OVERLOAD_POLICIES.pop(ws, None)
         print(f"client unregistered: queue admission={result.value}", flush=True)
         if ws not in EVICTIONS:
             # Close in a separate task so the source does not wait on this socket.
@@ -211,6 +230,9 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
 
     monitor = ClientMonitor()
     MONITORS[ws] = monitor
+    OVERLOAD_POLICIES[ws] = OverloadPolicy(
+        max_messages=QUEUE_MAX_MESSAGES, max_bytes=QUEUE_MAX_BYTES
+    )
     print(f"client connected: id={client_id}", flush=True)
     try:
         # No await between HISTORY admission and registration: live updates cannot interleave.
@@ -218,6 +240,7 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
         await run_client_session(
             ws, queue, CLIENTS, monitor=monitor,
             send_timeout=CLIENT_SEND_TIMEOUT, close_timeout=CLIENT_CLOSE_TIMEOUT,
+            experiment_send_delay=EXPERIMENT_SEND_DELAY,
         )
     except (ConnectionClosed, asyncio.TimeoutError, OSError) as exc:
         print(f"client send ended: id={client_id}; reason={exc!r}", flush=True)
@@ -225,6 +248,7 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
         # The session handles CLIENTS, queue and sender; remove server-owned extras here.
         if MONITORS.get(ws) is monitor:
             del MONITORS[ws]
+        OVERLOAD_POLICIES.pop(ws, None)
         close_task = EVICTIONS.pop(ws, None)
         if close_task is not None:
             # The close task was already scheduled; wait for it rather than starting it here.
@@ -270,7 +294,9 @@ async def main_async(port: int) -> None:
         print(
             f"Delivery settings: queue_max_messages={QUEUE_MAX_MESSAGES}; "
             f"queue_max_bytes={QUEUE_MAX_BYTES}; "
-            f"send_timeout={CLIENT_SEND_TIMEOUT}s; close_timeout={CLIENT_CLOSE_TIMEOUT}s",
+            f"send_timeout={CLIENT_SEND_TIMEOUT}s; close_timeout={CLIENT_CLOSE_TIMEOUT}s; "
+            f"overload_policy={'naive' if NAIVE_DELIVERY else 'semantic'}; "
+            f"experiment_send_delay_ms={EXPERIMENT_SEND_DELAY * 1000:.1f}",
             flush=True,
         )
         # Keep listening until the server is cancelled or stopped.
@@ -299,12 +325,31 @@ def positive_seconds(value: str) -> float:
     return number
 
 
+
+def nonnegative_milliseconds(value: str) -> float:
+    """Parse an experiment delay in milliseconds and return seconds."""
+    try:
+        number = float(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError("must be non-negative finite milliseconds") from None
+    if not math.isfinite(number) or number < 0:
+        raise argparse.ArgumentTypeError("must be non-negative finite milliseconds")
+    return number / 1000.0
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="LiveRecall WebSocket server",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--naive", action="store_true",
+        help="Disable proactive P4 overload mode; retain queue-full fallback only",
+    )
+    parser.add_argument(
+        "--experiment-send-delay-ms", type=nonnegative_milliseconds, default=0.0,
+        help="EXPERIMENT ONLY: artificial delay before each per-client send; disabled by default",
+    )
     # String environment defaults are validated by argparse just like CLI values.
     # Explicit CLI values take precedence, including over invalid env defaults.
     parser.add_argument(
@@ -332,6 +377,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     global QUEUE_MAX_MESSAGES, QUEUE_MAX_BYTES, CLIENT_SEND_TIMEOUT, CLIENT_CLOSE_TIMEOUT
+    global NAIVE_DELIVERY, EXPERIMENT_SEND_DELAY
     parser = build_parser()
     args = parser.parse_args()
     # Set once before the event loop starts; all handlers use the same settings.
@@ -339,6 +385,8 @@ def main() -> None:
     QUEUE_MAX_BYTES = args.queue_max_bytes
     CLIENT_SEND_TIMEOUT = args.send_timeout
     CLIENT_CLOSE_TIMEOUT = args.close_timeout
+    NAIVE_DELIVERY = args.naive
+    EXPERIMENT_SEND_DELAY = args.experiment_send_delay_ms
     try:
         asyncio.run(main_async(args.port))
     except KeyboardInterrupt:

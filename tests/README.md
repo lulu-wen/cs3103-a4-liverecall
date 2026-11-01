@@ -26,9 +26,6 @@ the application packages `delivery` and `captions`.
 
 - Real loopback count/byte overflow: the server coalesces obsolete provisional
   revisions before eviction, while a healthy client receives every revision.
-- A new segment entering a full queue can reclaim obsolete revisions of other
-  segments. Finals/latest state, FIFO survivor order, UTF-8 byte accounting and
-  original waiting age are preserved; rejected compaction changes nothing.
 
 - 500 revisions across five segments: coalescing retains completed finals and
   the latest active captions within queue count/byte limits.

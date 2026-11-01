@@ -29,6 +29,7 @@ async def run_client_sender(
     send_timeout: float = 10.0,
     close_timeout: float = 3.0,
     monitor: ClientMonitor | None = None,
+    experiment_send_delay: float = 0.0,
 ) -> None:
     """Consume one client's queue and send payloads sequentially.
 
@@ -47,6 +48,11 @@ async def run_client_sender(
         if (isinstance(value, bool) or not isinstance(value, (int, float))
                 or not math.isfinite(value) or value <= 0):
             raise ValueError(f"{name} must be a positive finite number")
+    if (isinstance(experiment_send_delay, bool)
+            or not isinstance(experiment_send_delay, (int, float))
+            or not math.isfinite(experiment_send_delay)
+            or experiment_send_delay < 0):
+        raise ValueError("experiment_send_delay must be a non-negative finite number")
 
     close_code = 1000
     close_reason = "Sender stopped"
@@ -61,7 +67,12 @@ async def run_client_sender(
             if monitor is not None:
                 monitor.send_started(payload)
             try:
-                # Limit this send attempt, excluding time already spent in the queue.
+                # Experiment-only hook: simulate a constrained per-client sender without
+                # slowing source->server traffic. Disabled by default and intentionally
+                # outside send_timeout so it cannot masquerade as a network send failure.
+                if experiment_send_delay:
+                    await asyncio.sleep(experiment_send_delay)
+                # Limit the actual WebSocket send attempt, excluding queue and experiment delay.
                 await asyncio.wait_for(ws.send(payload), timeout=send_timeout)
                 outcome = "sent"
             except asyncio.TimeoutError:
