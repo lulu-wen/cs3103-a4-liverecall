@@ -9,7 +9,7 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -t . -v
 ```
 
-All 116 tests passed on Windows on 1 November 2026 with websockets 16.1.1.
+All 110 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
 The original 38 component tests still use only the standard library.
 The code targets Python 3.10+;
 that runtime still needs verification on the team's Ubuntu environment.
@@ -50,10 +50,6 @@ replacement final without eviction. Unresolved final backlogs still evict; faile
 admission does not imply successful recovery. Lag-based mode transitions are pending.
 
 ## Local server checks completed
-
-- Five queue tests and one loopback test cover queue-wide coalescing: a new
-  segment can reclaim obsolete versions of other segments, queued finals remain,
-  UTF-8 bytes and survivor age stay accurate, and rejected compaction is atomic.
 
 - Four additional edge scenarios cover revision bursts, blocked-sender churn,
   ten-second reconnect and recovery after queue-full eviction. See the

@@ -190,7 +190,7 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
             await source.send(json.dumps(self.caption(5)))
             self.assertEqual(await self.receive(normal), self.caption(5))
 
-    async def check_full_queue_coalesces(self, *, byte_limited, cross_segments=False):
+    async def check_full_queue_coalesces(self, *, byte_limited):
         original_session = app.run_client_session
         blocked = asyncio.Event()
         release = asyncio.Event()
@@ -213,8 +213,6 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 await original_session(ws, queue, clients, **kwargs)
 
         count = 10 if byte_limited else 2
-        if cross_segments:
-            count = 4
         byte_limit = len(json.dumps(self.caption()).encode()) * 3 // 2 if byte_limited else 4096
         try:
             with patch.object(app, "run_client_session", controlled_session):
@@ -226,35 +224,23 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 await self.receive(normal)
                 source = await self.source()
                 first = self.caption(1)
-                if cross_segments:
-                    first["segment"] = 9
                 await source.send(json.dumps(first))
                 await asyncio.wait_for(blocked.wait(), 3)
                 self.assertEqual(await self.receive(normal), first)
-                if cross_segments:
-                    versions = [(1, 1, False), (1, 2, False), (2, 1, False),
-                                (2, 2, False), (3, 1, True)]
-                else:
-                    versions = [(1, 2, False), (1, 3, False), (1, 4, True)]
-                latest = {}
-                for segment, revision, final in versions:
+                for revision in (2, 3, 4):
                     update = self.caption(revision)
-                    update.update(segment=segment, final=final)
+                    update["final"] = revision == 4
                     await source.send(json.dumps(update))
                     self.assertEqual(await self.receive(normal), update)
-                    latest[segment] = update
-                expected_pending = list(latest.values())
                 queue = app.CLIENTS[chosen[0]]
-                self.assertEqual(queue.stats().depth, len(expected_pending))
-                self.assertEqual(queue.stats().pending_bytes,
-                                 sum(len(json.dumps(item).encode()) for item in expected_pending))
+                self.assertEqual(queue.stats().depth, 1)
+                self.assertEqual(queue.stats().pending_bytes, len(json.dumps(update).encode()))
                 self.assertEqual(len(app.CLIENTS), 2)
                 self.assertFalse(app.EVICTIONS)
                 release.set()
-                for expected in [first, *expected_pending]:
-                    self.assertEqual(await self.receive(slow), expected)
-                await self.wait_until(lambda: app.get_client_stats(chosen[0]).sent_messages
-                                      == 2 + len(expected_pending))
+                self.assertEqual(await self.receive(slow), first)
+                self.assertEqual(await self.receive(slow), update)
+                await self.wait_until(lambda: app.get_client_stats(chosen[0]).sent_messages == 3)
                 self.assertEqual(queue.stats().depth, 0)
                 self.assertEqual(queue.stats().pending_bytes, 0)
         finally:
@@ -265,9 +251,6 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_byte_full_coalesces_obsolete_revisions_before_eviction(self):
         await self.check_full_queue_coalesces(byte_limited=True)
-
-    async def test_new_segment_full_reclaims_other_segments_without_eviction(self):
-        await self.check_full_queue_coalesces(byte_limited=False, cross_segments=True)
 
 
 if __name__ == "__main__":

@@ -125,6 +125,28 @@ class ClientSenderTests(unittest.IsolatedAsyncioTestCase):
                 await asyncio.wait_for(task, 1)
         self.assertTrue(queue.stats().closed)
 
+    async def test_experiment_send_delay_delays_delivery_without_timeout(self):
+        ws, queue = FakeConnection(), self.queue()
+        queue.push("message")
+        loop = asyncio.get_running_loop()
+        started = loop.time()
+        task = self.start_sender(
+            ws, queue, send_timeout=0.01, experiment_send_delay=0.03
+        )
+        await asyncio.wait_for(ws.sent.wait(), 1)
+        self.assertGreaterEqual(loop.time() - started, 0.025)
+        self.assertEqual(ws.messages, ["message"])
+        queue.close()
+        await asyncio.wait_for(task, 1)
+
+    async def test_invalid_experiment_send_delay(self):
+        for bad in (-1, True, float("nan"), float("inf")):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    await run_client_sender(
+                        FakeConnection(), self.queue(), experiment_send_delay=bad
+                    )
+
     async def test_invalid_deadlines(self):
         for name in ("send_timeout", "close_timeout"):
             for bad in (0, -1, True, float("nan"), float("inf")):

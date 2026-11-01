@@ -28,6 +28,7 @@ async def run_client_session(
     send_timeout: float = 10.0,
     close_timeout: float = 3.0,
     monitor: ClientMonitor | None = None,
+    experiment_send_delay: float = 0.0,
 ) -> None:
     """Register a client and supervise its sender until disconnect or failure.
 
@@ -56,7 +57,7 @@ async def run_client_session(
     sender = asyncio.create_task(
         run_client_sender(
             ws, queue, send_timeout=send_timeout, close_timeout=close_timeout,
-            monitor=monitor,
+            monitor=monitor, experiment_send_delay=experiment_send_delay,
         ),
         name="client-sender",
     )

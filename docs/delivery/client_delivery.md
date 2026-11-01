@@ -54,11 +54,9 @@ result = queue.push_caption(
 
 - `degraded` is chosen by the overload policy; the queue does not detect overload.
 - With `coalesce=False` (default), every revision is queued normally.
-- With `coalesce=True`, admission scans all queued captions plus the incoming
-  caption for each segment's highest revision. It removes queued provisionals
-  with a lower revision, even for segments unrelated to the incoming caption.
-- Finals, HISTORY, each segment's latest state and in-flight sends are preserved.
-  Remaining messages retain their order; the incoming update is appended.
+- With `coalesce=True`, admission replaces queued older provisional revisions
+  of the same segment, appending the new update after the remaining messages.
+- Finals, HISTORY, other segments and in-flight sends are untouched.
 - If admission still fails, the entire old backlog stays unchanged. Handle the
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
