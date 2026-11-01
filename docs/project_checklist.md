@@ -160,7 +160,7 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 
 - [x] Implement and independently test bounded queue, sender, lifecycle cleanup
   and monitoring modules in `delivery/`.
-- [x] Pass 110 local component/integration/configuration tests, including 100 controlled
+- [x] Pass 116 local component/integration/configuration tests, including 100 controlled
   connections with ten blocked senders and real loopback server tests.
   These are not Ubuntu public-test results.
 - [x] Implement and test revision state and bounded history in `captions/`

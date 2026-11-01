@@ -89,7 +89,7 @@ def broadcast_to_queues(event: Event) -> None:
     """Admit updates without awaiting any client's network I/O.
 
     Preserve all revisions while capacity permits. Retry FULL once with
-    same-segment coalescing before falling back to eviction. Lag detection and
+    queue-wide provisional coalescing before falling back to eviction. Lag detection and
     degraded-mode transitions remain the overload policy's responsibility.
     """
     # Snapshot the registry because rejected clients are removed during iteration.
@@ -100,7 +100,7 @@ def broadcast_to_queues(event: Event) -> None:
         )
         if result is PushResult.FULL:
             # The failed push leaves the backlog intact. Retry atomically,
-            # removing only older queued provisionals replaced by this event.
+            # removing provisionals superseded by newer queued/incoming captions.
             result = queue.push_caption(
                 event.raw, segment=event.segment, revision=event.revision,
                 final=event.final, coalesce=True,

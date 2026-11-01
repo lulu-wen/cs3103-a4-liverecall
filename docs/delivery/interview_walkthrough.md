@@ -64,7 +64,7 @@ queue -> producer pushes -> that client's sender calls `get()` then `ws.send()`.
 Path: blocked/slower send -> transport/backlog growth -> queue admission result
 -> `broadcast_to_queues` -> unregister -> `close_overloaded_client`.
 
-- Current server behavior: FULL first retries admission with same-segment
+- Current server behavior: FULL first retries admission with queue-wide
   provisional coalescing. Unresolved failure unregisters that client and schedules
   a bounded close attempt with code 1013. Other clients continue independently.
 - Session cleanup closes the queue, cancels/awaits its tasks and removes registry
@@ -76,8 +76,9 @@ Path: blocked/slower send -> transport/backlog growth -> queue admission result
 
 Path: `ClientQueue.push_caption(..., coalesce=True)` -> `_push`.
 
-- Only queued non-final revisions of the same segment with a lower revision than
-  the admitted replacement are removed.
+- Scan the entire queue plus the incoming caption for each segment's highest
+  revision. Remove a queued non-final only if a higher revision of that same
+  segment exists in this candidate batch, even if the incoming segment differs.
 - Preserve existing finals, HISTORY, other segments' latest state and in-flight
   messages. Reject admission without changing the backlog if replacement cannot fit.
 - Normal mode keeps every revision. Coalescing must be enabled explicitly by policy.
