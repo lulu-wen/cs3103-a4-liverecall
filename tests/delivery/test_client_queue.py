@@ -189,6 +189,64 @@ class CaptionQueueTests(unittest.IsolatedAsyncioTestCase):
                     queue.push_caption("x", **(valid | {field: value}))
         self.assertEqual(queue.stats().depth, 0)
 
+    async def test_new_segment_reclaims_obsolete_versions_of_other_segments(self):
+        queue = ClientQueue(max_messages=5, max_bytes=100)
+        queue.push("HISTORY")
+        for segment in (1, 2):
+            for revision in (1, 2):
+                queue.push_caption(f"s{segment}r{revision}", segment=segment,
+                                   revision=revision, final=False)
+        self.assertEqual(queue.push_caption(
+            "s3r1", segment=3, revision=1, final=False, coalesce=True,
+        ), PushResult.ACCEPTED)
+        expected = ["HISTORY", "s1r2", "s2r2", "s3r1"]
+        self.assertEqual(queue.stats().pending_bytes, sum(map(len, expected)))
+        self.assertEqual([await queue.get() for _ in expected], expected)
+
+    async def test_queued_final_supersedes_provisional_during_unrelated_push(self):
+        queue = ClientQueue(max_messages=3, max_bytes=100)
+        queue.push_caption("old", segment=1, revision=1, final=False)
+        queue.push_caption("final1", segment=1, revision=2, final=True)
+        queue.push_caption("final2", segment=2, revision=1, final=True)
+        self.assertEqual(queue.push_caption(
+            "active3", segment=3, revision=1, final=False, coalesce=True,
+        ), PushResult.ACCEPTED)
+        self.assertEqual([await queue.get() for _ in range(3)],
+                         ["final1", "final2", "active3"])
+
+    async def test_failed_queue_wide_compaction_keeps_all_original_messages(self):
+        queue = ClientQueue(max_messages=4, max_bytes=6)
+        for payload, segment, revision in (("a", 1, 1), ("b", 1, 2),
+                                           ("c", 2, 1), ("d", 3, 1)):
+            queue.push_caption(payload, segment=segment, revision=revision, final=False)
+        # Removing 'a' still leaves 3 + 4 bytes, beyond the 6-byte cap.
+        self.assertEqual(queue.push_caption(
+            "xxxx", segment=4, revision=1, final=True, coalesce=True,
+        ), PushResult.FULL)
+        self.assertEqual(queue.stats().depth, 4)
+        self.assertEqual(queue.stats().pending_bytes, 4)
+        self.assertEqual([await queue.get() for _ in range(4)], ["a", "b", "c", "d"])
+
+    async def test_queue_wide_compaction_counts_utf8_bytes(self):
+        queue = ClientQueue(max_messages=3, max_bytes=6)
+        queue.push_caption("\u4f60", segment=1, revision=1, final=False)
+        queue.push_caption("\u597d", segment=1, revision=2, final=False)
+        self.assertEqual(queue.push_caption(
+            "abc", segment=2, revision=1, final=True, coalesce=True,
+        ), PushResult.ACCEPTED)
+        self.assertEqual(queue.stats().pending_bytes, 6)
+        self.assertEqual(await queue.get(), "\u597d")
+        self.assertEqual(await queue.get(), "abc")
+
+    async def test_queue_wide_compaction_preserves_survivor_waiting_age(self):
+        queue = ClientQueue(max_messages=3, max_bytes=100)
+        with patch("delivery.client_queue.monotonic", side_effect=[10.0, 11.0, 12.0, 20.0, 23.0]):
+            queue.push_caption("old", segment=1, revision=1, final=False)
+            queue.push_caption("latest", segment=1, revision=2, final=False)
+            queue.push_caption("other", segment=2, revision=1, final=False)
+            queue.push_caption("new", segment=3, revision=1, final=False, coalesce=True)
+            self.assertEqual(queue.stats().oldest_pending_seconds, 12.0)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -81,8 +81,9 @@ class ClientQueue:
         Metadata must describe the serialized payload. The upstream caption state
         owns revision validation; this queue neither parses JSON nor keeps a
         second caption history. Normal mode retains every revision. Coalescing
-        removes only queued, lower revisions of this segment with final=False.
-        Finals, opaque messages and other segments are never removed. Rejection
+        removes queued provisionals superseded by a higher revision anywhere
+        in the queue or by this incoming caption, across all segments.
+        Finals, opaque messages and each segment's latest state are preserved. Rejection
         leaves the entire backlog unchanged, including replaceable revisions.
         """
         for name, value in (("segment", segment), ("revision", revision)):
@@ -106,11 +107,19 @@ class ClientQueue:
             return PushResult.TOO_LARGE
         obsolete = []
         if coalesce:
-            obsolete = [
-                item for item in self._items
-                if item.segment == segment and item.final is False
-                and item.revision < revision
-            ]
+            # Include the incoming caption without mutating the queue yet.
+            latest_revisions = {segment: revision}
+            for item in self._items:
+                if item.segment is not None:
+                    previous = latest_revisions.get(item.segment, 0)
+                    if item.revision > previous:
+                        latest_revisions[item.segment] = item.revision
+            # A newer queued final can also supersede older provisionals.
+            # Finals themselves and opaque messages are never candidates.
+            for item in self._items:
+                if item.final is False:
+                    if item.revision < latest_revisions[item.segment]:
+                        obsolete.append(item)
         removed_bytes = sum(item.size for item in obsolete)
         if (len(self._items) - len(obsolete) >= self._max_messages
                 or self._pending_bytes - removed_bytes + size > self._max_bytes):
