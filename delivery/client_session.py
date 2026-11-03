@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections.abc import Iterable
 from typing import MutableMapping, Protocol
 
 from .client_monitor import ClientMonitor
@@ -29,13 +30,14 @@ async def run_client_session(
     close_timeout: float = 3.0,
     monitor: ClientMonitor | None = None,
     experiment_send_delay: float = 0.0,
+    initial_messages: Iterable[str | bytes] = (),
 ) -> None:
     """Register a client and supervise its sender until disconnect or failure.
 
-    P2 may enqueue HISTORY before calling this function. Registration and task
+    The caller may supply a bounded recovery prefix. Registration and task
     creation contain no await, so producers on the same event loop cannot
-    interleave live updates before registration. History construction itself
-    must still be coordinated with P1/P2.
+    interleave live updates before registration. Build the recovery snapshot
+    without yielding before entering this coroutine.
 
     The caller owns ws/queue until this coroutine starts; after entry, this
     function owns their cleanup. Use one session per connection. Queue-full
@@ -58,6 +60,7 @@ async def run_client_session(
         run_client_sender(
             ws, queue, send_timeout=send_timeout, close_timeout=close_timeout,
             monitor=monitor, experiment_send_delay=experiment_send_delay,
+            initial_messages=initial_messages,
         ),
         name="client-sender",
     )

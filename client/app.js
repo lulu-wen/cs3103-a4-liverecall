@@ -234,7 +234,8 @@ function connect() {
       if (catchingUp) {
         catchingUp = false;
         fellBehindEl.hidden = true;
-        statusEl.textContent = `connected (caught up: recovered ${recovered} captions)`;
+        // A HISTORY batch arriving does not prove all recovery state is complete.
+        statusEl.textContent = `connected (history batch: ${recovered} captions)`;
       }
     }
   });
