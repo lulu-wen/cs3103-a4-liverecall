@@ -41,6 +41,7 @@ class _PendingMessage:
     segment: int | None = None
     revision: int | None = None
     final: bool | None = None
+    sequence: int = 0
 
 
 class ClientQueue:
@@ -60,6 +61,7 @@ class ClientQueue:
         self._max_bytes = max_bytes
         self._items: deque[_PendingMessage] = deque()
         self._pending_bytes = 0
+        self._next_sequence = 0
         self._closed = False
         self._ready = asyncio.Event()
 
@@ -137,7 +139,10 @@ class ClientQueue:
                 if id(item) not in removed_ids:
                     remaining.append(item)
             self._items = remaining
-        self._items.append(_PendingMessage(payload, size, monotonic(), segment, revision, final))
+        self._items.append(_PendingMessage(
+            payload, size, monotonic(), segment, revision, final, self._next_sequence,
+        ))
+        self._next_sequence += 1
         self._pending_bytes += size - removed_bytes
         self._ready.set()
         return PushResult.ACCEPTED

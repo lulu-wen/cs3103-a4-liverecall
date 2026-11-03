@@ -33,12 +33,15 @@ from captions.state import CaptionState, Event
 from delivery.client_monitor import ClientMonitor, DeliveryStats
 from delivery.client_recovery import RecoveryPlan
 from delivery.client_queue import ClientQueue, PushResult
+from delivery.final_aware_queue import FinalAwareQueue
 from delivery.client_session import run_client_session
 from delivery.overload_policy import OverloadMode, OverloadPolicy
 
 # Provisional integration settings; tune alongside the semantic overload policy.
 QUEUE_MAX_MESSAGES = 256
 QUEUE_MAX_BYTES = 1024 * 1024
+ACTIVE_MAX_SEGMENTS = 1000
+FINAL_BURST = 4
 CLIENT_SEND_TIMEOUT = 10.0
 CLIENT_CLOSE_TIMEOUT = 3.0
 # Public load clients accept WebSocket messages up to 1 MiB after decompression.
@@ -108,7 +111,7 @@ def broadcast_to_queues(event: Event) -> None:
     """Admit updates without awaiting any client's network I/O.
 
     Preserve all revisions while capacity permits. Retry FULL once with
-    same-segment coalescing before falling back to eviction. Lag detection and
+    protected-lane admission before falling back to eviction. Lag detection and
     degraded-mode transitions remain the overload policy's responsibility.
     """
     # Snapshot the registry because rejected clients are removed during iteration.
@@ -130,7 +133,7 @@ def broadcast_to_queues(event: Event) -> None:
         )
         if result is PushResult.FULL:
             # The failed push leaves the backlog intact. Retry atomically,
-            # removing provisionals superseded by newer same-segment revisions.
+            # keeping finals and latest active state in separate bounded lanes.
             result = queue.push_caption(
                 event.raw, segment=event.segment, revision=event.revision,
                 final=event.final, coalesce=True,
@@ -218,7 +221,12 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
 
     # Snapshot finalized context and active state before registration.
     # No await until registration, so source updates cannot slip into this gap.
-    queue = ClientQueue(max_messages=QUEUE_MAX_MESSAGES, max_bytes=QUEUE_MAX_BYTES)
+    queue = FinalAwareQueue(
+        max_messages=QUEUE_MAX_MESSAGES,
+        max_bytes=QUEUE_MAX_BYTES,
+        max_active_segments=ACTIVE_MAX_SEGMENTS,
+        final_burst=FINAL_BURST,
+    )
     items = HISTORY.since(
         last_segment=client_last_segment,
         last_revision=client_last_revision,
@@ -315,6 +323,7 @@ async def main_async(port: int) -> None:
         print(
             f"Delivery settings: queue_max_messages={QUEUE_MAX_MESSAGES}; "
             f"queue_max_bytes={QUEUE_MAX_BYTES}; "
+            f"active_max_segments={ACTIVE_MAX_SEGMENTS}; final_burst={FINAL_BURST}; "
             f"send_timeout={CLIENT_SEND_TIMEOUT}s; close_timeout={CLIENT_CLOSE_TIMEOUT}s; "
             f"keepalive={KEEPALIVE_INTERVAL}s/{KEEPALIVE_TIMEOUT}s; "
             f"overload_policy={'naive' if NAIVE_DELIVERY else 'semantic'}; "
@@ -366,7 +375,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
         "--naive", action="store_true",
-        help="Disable proactive P4 overload mode; retain queue-full fallback only",
+        help="Disable proactive switching; retain protected-lane queue-full fallback",
     )
     parser.add_argument(
         "--experiment-send-delay-ms", type=nonnegative_milliseconds, default=0.0,
@@ -377,12 +386,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--queue-max-messages", type=positive_int,
         default=os.getenv("LIVERECALL_QUEUE_MAX_MESSAGES", QUEUE_MAX_MESSAGES),
-        help="Maximum queued messages per client; env: LIVERECALL_QUEUE_MAX_MESSAGES",
+        help="NORMAL/final FIFO message cap; active map is separate; env: LIVERECALL_QUEUE_MAX_MESSAGES",
     )
     parser.add_argument(
         "--queue-max-bytes", type=positive_int,
         default=os.getenv("LIVERECALL_QUEUE_MAX_BYTES", QUEUE_MAX_BYTES),
-        help="Maximum queued payload bytes per client; env: LIVERECALL_QUEUE_MAX_BYTES",
+        help="Payload byte cap per lane (two in DEGRADED); env: LIVERECALL_QUEUE_MAX_BYTES",
     )
     parser.add_argument(
         "--send-timeout", type=positive_seconds,
