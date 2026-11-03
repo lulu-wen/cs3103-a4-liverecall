@@ -9,12 +9,13 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -t . -v
 ```
 
-The recovery export passed 141 tests on Ubuntu Python 3.12.3
+The final-aware export passed 158 tests on Ubuntu Python 3.12.3
 with websockets 16.1.1. This does not verify every supported Python version.
 The original 38 component tests use only the standard library.
 
 | Test | Main checks |
 | --- | --- |
+| `tests/delivery/test_final_aware_queue.py` | Separate lane count/byte caps, latest active state, final priority and backlog override, service turns, atomic failure, return to NORMAL, wakeup and close |
 | `tests/delivery/test_client_queue.py` | FIFO, count/byte limits, UTF-8 sizes, wakeup, close and opt-in provisional replacement |
 | `tests/delivery/test_client_sender.py` | Ordered sends, isolation, deadlines, errors and cancellation |
 | `tests/delivery/test_client_session.py` | Registry/task cleanup and repeated cancellation |

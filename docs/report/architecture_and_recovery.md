@@ -1,14 +1,14 @@
 # Architecture, Protocol and Recovery
 
-Code-grounded report material for source snapshot `6dbd7da`.
+Code-grounded report material for final-aware export `f115f048f59d`.
 
 ## 1.1 System Architecture
 
-The supplied caption_source.py emits full-text revisions over WebSocket. A single asyncio server routes source and student connections by their first hello message. CaptionState validates updates and retains the latest active state; History stores recent finals. Every student connection has an independent bounded live queue, sender and supervised session. RecoveryPlan snapshots retained finals and active state; the same sender streams this recovery prefix before live delivery. The browser is served separately over HTTP and maintains its own display and local recall state. All lecture state is in memory, shared across source reconnects and lost on server restart.
+The supplied caption_source.py emits full-text revisions over WebSocket. One asyncio server routes connections by their hello message. CaptionState retains active/latest revisions and finalized IDs; History retains recent finals. Each client owns a FinalAwareQueue, sender and supervised session. NORMAL uses FIFO; DEGRADED separates final/control FIFO and latest-active map, with a final-aware scheduler. RecoveryPlan supplies a bounded prefix before live delivery. The browser maintains display and recall state; lecture state is lost on server restart.
 
 ![System architecture](figures/system_architecture.png)
 
-Figure 1. `CaptionState` retains each active segment's latest provisional and finalized IDs/revisions. `History` retains full final messages for recovery. Each client owns an independent live queue/sender; RecoveryPlan supplies a bounded prefix directly to the sender. Dashed paths show recovery and control.
+Figure 1. `CaptionState` retains latest active provisionals and finalized IDs/revisions; `History` retains full finals. Each client uses NORMAL FIFO or DEGRADED final/control FIFO plus latest-active map. A final-aware scheduler feeds its sender; RecoveryPlan supplies a bounded initial prefix. Modes are exclusive; dashed paths show recovery/control.
 
 ## 1.2 Application Protocol
 

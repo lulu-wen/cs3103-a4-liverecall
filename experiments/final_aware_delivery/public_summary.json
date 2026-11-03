@@ -1,0 +1,461 @@
+{
+  "source_snapshot": "41c208b+final-aware-working-f115f048f59d",
+  "tests": {
+    "t1": {
+      "clients": 20,
+      "duration_seconds": 20,
+      "expected_segments": 22,
+      "metrics": {
+        "p50_ms": {
+          "median": 1.339,
+          "min": 1.335,
+          "max": 1.3915
+        },
+        "p95_ms": {
+          "median": 1.9681999999999997,
+          "min": 1.7610999999999999,
+          "max": 2.00705
+        },
+        "p99_ms": {
+          "median": 2.25081,
+          "min": 1.8508099999999998,
+          "max": 2.364819999999999
+        },
+        "fresh_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "fresh_final_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "final_completeness_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "normal_update_coverage_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "connection_errors": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "duplicates": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "stale": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "recovered_history_items": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      }
+    },
+    "t2": {
+      "clients": 100,
+      "duration_seconds": 40,
+      "expected_segments": 49,
+      "metrics": {
+        "p50_ms": {
+          "median": 3.103,
+          "min": 2.96,
+          "max": 4.476
+        },
+        "p95_ms": {
+          "median": 4.168,
+          "min": 3.995,
+          "max": 6.745
+        },
+        "p99_ms": {
+          "median": 4.443,
+          "min": 4.280030000000001,
+          "max": 7.139030000000001
+        },
+        "fresh_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "fresh_final_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "final_completeness_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "normal_update_coverage_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "connection_errors": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "duplicates": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "stale": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "recovered_history_items": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        }
+      }
+    },
+    "t3": {
+      "clients": 100,
+      "duration_seconds": 60,
+      "expected_segments": 76,
+      "metrics": {
+        "p50_ms": {
+          "median": 3.119,
+          "min": 3.063,
+          "max": 3.541
+        },
+        "p95_ms": {
+          "median": 649.09935,
+          "min": 646.55835,
+          "max": 654.4523
+        },
+        "p99_ms": {
+          "median": 11253.193159999999,
+          "min": 11248.8953,
+          "max": 11254.08165
+        },
+        "fresh_pct": {
+          "median": 94.91916859122402,
+          "min": 94.91916859122402,
+          "max": 94.91916859122402
+        },
+        "fresh_final_pct": {
+          "median": 90.13157894736842,
+          "min": 90.13157894736842,
+          "max": 90.13157894736842
+        },
+        "final_completeness_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "normal_update_coverage_pct": {
+          "median": 94.95614035087719,
+          "min": 94.95614035087719,
+          "max": 94.95614035087719
+        },
+        "connection_errors": {
+          "median": 20,
+          "min": 20,
+          "max": 20
+        },
+        "duplicates": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "stale": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "recovered_history_items": {
+          "median": 380,
+          "min": 380,
+          "max": 380
+        },
+        "recovery_p95_ms": {
+          "median": 2.62325,
+          "min": 2.3344,
+          "max": 2.65035
+        }
+      },
+      "groups": {
+        "normal": {
+          "clients": {
+            "median": 90,
+            "min": 90,
+            "max": 90
+          },
+          "p50_ms": {
+            "median": 3.043,
+            "min": 2.994,
+            "max": 3.469
+          },
+          "p95_ms": {
+            "median": 5.657,
+            "min": 5.645049999999999,
+            "max": 5.964
+          },
+          "p99_ms": {
+            "median": 6.359620000000003,
+            "min": 6.177,
+            "max": 6.5172400000000055
+          },
+          "fresh_pct": {
+            "median": 100.0,
+            "min": 100.0,
+            "max": 100.0
+          },
+          "final_completeness_pct": {
+            "median": 100.0,
+            "min": 100.0,
+            "max": 100.0
+          },
+          "fresh_final_pct": {
+            "median": 100.0,
+            "min": 100.0,
+            "max": 100.0
+          },
+          "live_update_coverage_pct": {
+            "median": 100.0,
+            "min": 100.0,
+            "max": 100.0
+          },
+          "unique_finals": {
+            "median": 6840,
+            "min": 6840,
+            "max": 6840
+          },
+          "expected_finals": {
+            "median": 6840,
+            "min": 6840,
+            "max": 6840
+          },
+          "recovered_items": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          },
+          "connections": {
+            "median": 90,
+            "min": 90,
+            "max": 90
+          },
+          "connection_errors": {
+            "median": 0,
+            "min": 0,
+            "max": 0
+          }
+        },
+        "slow": {
+          "clients": {
+            "median": 10,
+            "min": 10,
+            "max": 10
+          },
+          "p50_ms": {
+            "median": 6954.3865000000005,
+            "min": 6952.5095,
+            "max": 6954.389999999999
+          },
+          "p95_ms": {
+            "median": 13355.78035,
+            "min": 13355.6948,
+            "max": 13356.20005
+          },
+          "p99_ms": {
+            "median": 13806.27094,
+            "min": 13805.36675,
+            "max": 13806.95723
+          },
+          "fresh_pct": {
+            "median": 2.6548672566371683,
+            "min": 2.6548672566371683,
+            "max": 2.6548672566371683
+          },
+          "final_completeness_pct": {
+            "median": 100.0,
+            "min": 100.0,
+            "max": 100.0
+          },
+          "fresh_final_pct": {
+            "median": 1.3157894736842106,
+            "min": 1.3157894736842106,
+            "max": 1.3157894736842106
+          },
+          "live_update_coverage_pct": {
+            "median": 49.56140350877193,
+            "min": 49.56140350877193,
+            "max": 49.56140350877193
+          },
+          "unique_finals": {
+            "median": 760,
+            "min": 760,
+            "max": 760
+          },
+          "expected_finals": {
+            "median": 760,
+            "min": 760,
+            "max": 760
+          },
+          "recovered_items": {
+            "median": 380,
+            "min": 380,
+            "max": 380
+          },
+          "connections": {
+            "median": 30,
+            "min": 30,
+            "max": 30
+          },
+          "connection_errors": {
+            "median": 20,
+            "min": 20,
+            "max": 20
+          }
+        }
+      }
+    },
+    "t4": {
+      "clients": 100,
+      "duration_seconds": 60,
+      "expected_segments": 76,
+      "metrics": {
+        "p50_ms": {
+          "median": 3.938,
+          "min": 3.767,
+          "max": 4.073
+        },
+        "p95_ms": {
+          "median": 5.945,
+          "min": 5.835049999999999,
+          "max": 6.187049999999999
+        },
+        "p99_ms": {
+          "median": 6.753049999999992,
+          "min": 6.333009999999999,
+          "max": 6.809009999999999
+        },
+        "fresh_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "fresh_final_pct": {
+          "median": 98.42105263157895,
+          "min": 98.42105263157895,
+          "max": 98.42105263157895
+        },
+        "final_completeness_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "normal_update_coverage_pct": {
+          "median": 98.24561403508773,
+          "min": 98.24561403508773,
+          "max": 98.24561403508773
+        },
+        "connection_errors": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "duplicates": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "stale": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "recovered_history_items": {
+          "median": 140,
+          "min": 140,
+          "max": 140
+        },
+        "recovery_p95_ms": {
+          "median": 3.4598,
+          "min": 3.2157,
+          "max": 3.4692499999999997
+        }
+      }
+    },
+    "t5": {
+      "clients": 100,
+      "duration_seconds": 40,
+      "expected_segments": 49,
+      "metrics": {
+        "p50_ms": {
+          "median": 256.9745,
+          "min": 255.589,
+          "max": 257.114
+        },
+        "p95_ms": {
+          "median": 703.9239499999996,
+          "min": 678.6950000000002,
+          "max": 736.64615
+        },
+        "p99_ms": {
+          "median": 978.5456200000001,
+          "min": 893.023480000004,
+          "max": 982.27629
+        },
+        "fresh_pct": {
+          "median": 87.35796421038307,
+          "min": 87.33333333333333,
+          "max": 88.43065196678917
+        },
+        "fresh_final_pct": {
+          "median": 86.93877551020408,
+          "min": 84.46938775510205,
+          "max": 88.85714285714286
+        },
+        "final_completeness_pct": {
+          "median": 100.0,
+          "min": 100.0,
+          "max": 100.0
+        },
+        "normal_update_coverage_pct": {
+          "median": 99.9795918367347,
+          "min": 99.95918367346938,
+          "max": 100.0
+        },
+        "connection_errors": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "duplicates": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "stale": {
+          "median": 0,
+          "min": 0,
+          "max": 0
+        },
+        "recovered_history_items": {
+          "median": 1,
+          "min": 0,
+          "max": 2
+        }
+      }
+    }
+  }
+}

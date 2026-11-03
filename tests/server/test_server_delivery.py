@@ -297,8 +297,56 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(app.EVICTIONS)
                 release.set()
                 self.assertEqual(await self.receive(slow), first)
+                # Replacing a map entry keeps that segment's existing service turn.
                 self.assertEqual([await self.receive(slow) for _ in range(3)],
-                                 [updates[1], updates[2], updates[3]])
+                                 [updates[2], updates[1], updates[3]])
+        finally:
+            release.set()
+
+    async def test_new_provisional_cannot_evict_queued_finals_on_full_fallback(self):
+        original_session = app.run_client_session
+        blocked, release = asyncio.Event(), asyncio.Event()
+        chosen = []
+
+        async def gated_session(ws, queue, clients, **kwargs):
+            if chosen:
+                return await original_session(ws, queue, clients, **kwargs)
+            chosen.append(ws)
+            original_send = ws.send
+
+            async def send(raw):
+                if json.loads(raw).get("type") == "CAPTION_UPDATE":
+                    blocked.set()
+                    await release.wait()
+                await original_send(raw)
+
+            with patch.object(ws, "send", send):
+                await original_session(ws, queue, clients, **kwargs)
+
+        try:
+            with patch.object(app, "run_client_session", gated_session), \
+                    patch.object(app, "NAIVE_DELIVERY", True):
+                with patch.object(app, "QUEUE_MAX_MESSAGES", 2):
+                    slow = await self.student(1)
+                    await self.receive(slow)
+                normal = await self.student(2)
+                await self.receive(normal)
+                source = await self.source()
+                updates = []
+                for segment in range(1, 5):
+                    message = self.caption()
+                    message.update(segment=segment, final=segment < 4)
+                    updates.append(message)
+                    await source.send(json.dumps(message))
+                    self.assertEqual(await self.receive(normal), message)
+                    if segment == 1:
+                        await asyncio.wait_for(blocked.wait(), 3)
+                stats = app.CLIENTS[chosen[0]].stats()
+                self.assertEqual((stats.final_depth, stats.active_depth), (2, 1))
+                self.assertFalse(app.EVICTIONS)
+                self.assertEqual(len(app.CLIENTS), 2)
+                release.set()
+                self.assertEqual([await self.receive(slow) for _ in range(4)], updates)
         finally:
             release.set()
 
