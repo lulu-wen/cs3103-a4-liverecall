@@ -9,6 +9,7 @@ state, recovery and a per-client overload policy.
 | Module in `delivery/` | Job |
 | --- | --- |
 | `client_queue.py` | Store outgoing messages with count and byte limits |
+| `final_aware_queue.py` | Preserve NORMAL FIFO; separate finals and latest active state in DEGRADED |
 | `client_sender.py` | Send one queue's messages in order |
 | `client_session.py` | Register the client, supervise tasks and clean up |
 | `client_monitor.py` | Report queue, send and transport-buffer state |
@@ -32,12 +33,16 @@ Current server wiring:
 
 - `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
 - `broadcast_to_queues()` calls `push_caption()` without waiting on socket writes.
-  NORMAL admission preserves revisions; DEGRADED admission enables coalescing
-  across the queue. FULL retries once with coalescing enabled.
+  NORMAL preserves revisions. DEGRADED uses a protected final/control FIFO plus
+  a latest-provisional map. FULL retries once using these lanes.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
 - A bounded recovery snapshot is captured before registration. The sender streams
   HISTORY batches, then active snapshots, before taking messages from the live queue.
-- Default queue caps: 256 messages and 1 MiB of encoded payloads per connection.
+- NORMAL FIFO: 256 messages / 1 MiB. DEGRADED: final/control FIFO has the same
+  limits; the active map separately allows 1,000 segments / 1 MiB. The modes are
+  exclusive, giving a hard pending-live limit of 1,256 items / 2 MiB in DEGRADED.
+  Python overhead, recovery references, one in-flight item and socket buffers
+  are separate from these payload limits.
 - Unresolved admission failure unregisters the client and starts one tracked close task
   (code 1013). The handler awaits/removes that task and its monitor on exit.
 - Recovery can restore retained finals after eviction; capacity/retention limits
@@ -45,8 +50,8 @@ Current server wiring:
 
 ## Caption coalescing API
 
-`push()` remains an opaque FIFO. Policy code can use `push_caption()` with
-validated caption metadata:
+`ClientQueue` remains the reusable FIFO. The server uses its `FinalAwareQueue`
+subclass and supplies validated caption metadata:
 
 ```python
 result = queue.push_caption(
@@ -56,20 +61,24 @@ result = queue.push_caption(
 ```
 
 - `degraded` is chosen by the overload policy; the queue does not detect overload.
-- With `coalesce=False` (default), every revision is queued normally.
-- With `coalesce=True`, scan the entire queue and remove a provisional only if
-  a higher revision of that same segment is queued or being admitted. A queued
-  final can supersede older provisionals. Keep every active segment's latest
-  version, regardless of segment ID or interleaving.
-- Finals, opaque HISTORY and in-flight sends are never coalesced. Append the
-  new update after the remaining messages, preserving their FIFO order.
+- With `coalesce=False`, preserve all revisions in NORMAL FIFO. Returning from
+  DEGRADED restores retained arrival order only if the FIFO can fit the backlog
+  and incoming message; otherwise the queue keeps its bounded degraded lanes.
+- With `coalesce=True`, build a candidate final/control FIFO and a map containing
+  each active segment's highest queued/incoming revision. Newer finals remove
+  their own provisional entries. Segment ID order never justifies removal.
+- Finals and opaque controls preserve their FIFO order and have capacity separate
+  from provisional state. An active replacement keeps that segment's service turn.
+- Below four pending finals (or the configured FIFO cap if smaller), the scheduler
+  normally allows an active turn after four protected sends. Above that backlog
+  target it drains finals first, avoiding a fixed 80% cap on final throughput.
 - If admission still fails, the entire old backlog stays unchanged. Handle the
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
 - Current live broadcasts enable coalescing in degraded mode or on a FULL retry.
   Recovery is a separate immutable prefix, not a coalescing candidate.
-- A coalescing push scans the bounded queue; normal pushes remain constant-time
-  apart from UTF-8 byte counting.
+- A degraded admission scans bounded pending state; NORMAL pushes remain
+  constant-time apart from UTF-8 byte counting.
 
 ## Recovery initialization
 
@@ -91,7 +100,7 @@ HISTORY batch 1 -> ... -> HISTORY batch N -> latest active updates -> live queue
 - The plan shares immutable strings from bounded history/state: at most 5,000
   final references and 1,000 active references with current settings. It stores
   batch index ranges and serializes one batch at a time. The live queue retains
-  its separate 256-message/1 MiB bound. Snapshot references are released when the
+  its separate mode/lane limits described above. Snapshot references are released when the
   sender finishes the prefix or the session is torn down.
 - There is no await from context selection through successful registration;
   source updates cannot interleave and create a history-to-live gap.

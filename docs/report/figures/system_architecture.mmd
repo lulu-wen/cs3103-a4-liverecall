@@ -6,14 +6,15 @@
     STATE -. active snapshot .-> JOIN[RecoveryPlan: bounded snapshot, HISTORY batches up to 1 MiB]
     HISTORY -. recovery .-> JOIN
     subgraph SESSIONS[Independent client sessions: cleanup and monitoring]
-      Q1[Live queue 1: 256 messages / 1 MiB] --> TX1[Sender 1: recovery prefix then live queue]
-      QN[Live queue N: 256 messages / 1 MiB] --> TXN[Sender N: recovery prefix then live queue]
+      NORMAL[NORMAL FIFO: 256 messages / 1 MiB] --> SCHED[Scheduler: FIFO or finals first with active turns]
+      FINAL[DEGRADED final/control FIFO: 256 messages / 1 MiB] --> SCHED
+      ACTIVE[DEGRADED active map: 1000 segments / 1 MiB] --> SCHED
+      SCHED --> TX[One sender per client: recovery prefix then scheduler]
     end
-    POLICY --> Q1
-    POLICY --> QN
-    JOIN -. bounded recovery prefix .-> TX1
-    JOIN -. bounded recovery prefix .-> TXN
+    POLICY -->|NORMAL| NORMAL
+    POLICY -->|DEGRADED| FINAL
+    POLICY -->|DEGRADED| ACTIVE
+    JOIN -. bounded recovery prefix .-> TX
   end
-  TX1 --> BROWSER[Each browser: revision checks, live view and final recall]
-  TXN --> BROWSER
+  TX --> BROWSER[Each browser: revision checks, live view and final recall]
   BROWSER -. HELLO and final cursor .-> JOIN
