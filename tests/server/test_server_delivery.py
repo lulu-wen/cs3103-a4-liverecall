@@ -10,6 +10,7 @@ from websockets.asyncio.client import connect
 from websockets.asyncio.server import serve
 
 import solution_server as app
+from delivery.overload_policy import OverloadMode, OverloadPolicy, OverloadThresholds
 
 
 class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
@@ -248,6 +249,58 @@ class ServerDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_count_full_coalesces_obsolete_revisions_before_eviction(self):
         await self.check_full_queue_coalesces(byte_limited=False)
+
+    async def test_degraded_interleaved_segments_retain_each_latest_update(self):
+        original_session = app.run_client_session
+        blocked, release = asyncio.Event(), asyncio.Event()
+        chosen = []
+
+        async def gated_session(ws, queue, clients, **kwargs):
+            if chosen:
+                return await original_session(ws, queue, clients, **kwargs)
+            chosen.append(ws)
+            original_send = ws.send
+
+            async def gated_send(payload):
+                if json.loads(payload).get("type") == "CAPTION_UPDATE":
+                    blocked.set()
+                    await release.wait()
+                await original_send(payload)
+
+            with patch.object(ws, "send", gated_send):
+                await original_session(ws, queue, clients, **kwargs)
+
+        try:
+            with patch.object(app, "run_client_session", gated_session), \
+                    patch.object(app, "NAIVE_DELIVERY", False):
+                slow = await self.student(1)
+                await self.receive(slow)
+                normal = await self.student(2)
+                await self.receive(normal)
+                app.OVERLOAD_POLICIES[chosen[0]] = OverloadPolicy(
+                    max_messages=app.QUEUE_MAX_MESSAGES, max_bytes=app.QUEUE_MAX_BYTES,
+                    thresholds=OverloadThresholds(enter_queue_ratio=0),
+                )
+                source = await self.source()
+                first = self.caption(1)
+                await source.send(json.dumps(first))
+                await asyncio.wait_for(blocked.wait(), 3)
+                self.assertEqual(await self.receive(normal), first)
+                updates = [self.caption(2), self.caption(1), self.caption(3), self.caption(1)]
+                for update, segment in zip(updates, (1, 2, 1, 3)):
+                    update["segment"] = segment
+                    await source.send(json.dumps(update))
+                    self.assertEqual(await self.receive(normal), update)
+                queue = app.CLIENTS[chosen[0]]
+                self.assertIs(app.OVERLOAD_POLICIES[chosen[0]].mode, OverloadMode.DEGRADED)
+                self.assertEqual(queue.stats().depth, 3)
+                self.assertFalse(app.EVICTIONS)
+                release.set()
+                self.assertEqual(await self.receive(slow), first)
+                self.assertEqual([await self.receive(slow) for _ in range(3)],
+                                 [updates[1], updates[2], updates[3]])
+        finally:
+            release.set()
 
     async def test_byte_full_coalesces_obsolete_revisions_before_eviction(self):
         await self.check_full_queue_coalesces(byte_limited=True)

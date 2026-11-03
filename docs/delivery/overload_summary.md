@@ -8,16 +8,24 @@
 - Return to NORMAL only when utilization is at most 20%, oldest age at most
   0.15 s, and in-flight age at most 0.15 s (or no send is active).
 - Different entry/exit thresholds reduce rapid mode switching.
-- DEGRADED enables same-segment coalescing and lower-segment provisional dropping.
+- DEGRADED scans the queue for provisionals superseded by a higher revision of
+  the same segment. Segment ID order alone never justifies dropping a message.
   Finals and opaque initial messages remain protected from these removals.
-- FULL admission retries atomically with both dropping flags. If it still fails,
+- This protection applies to coalescing, not to every disconnect: queue teardown
+  discards pending data, and recovery remains subject to history/capacity limits.
+- FULL admission retries atomically with coalescing. If it still fails,
   the server unregisters the client and schedules close code 1013.
 
 These are queue/send-pressure signals, not browser acknowledgements or measured
 ping RTT. Keepalive independently uses a 2 s ping interval and 5 s pong timeout.
 `--naive` disables proactive transitions but retains the FULL fallback.
 
-The lower-segment rule assumes sequential source segments. Initial HISTORY can
+The former lower-segment rule was removed after interleaved-source experiments
+reproduced loss of still-useful latest provisionals. See the
+[threshold experiment](../../experiments/overload_thresholds/README.md).
+Keeping these revisions can increase backlog or lead to earlier eviction under
+sustained overload; preservation does not guarantee immediate delivery.
+Initial HISTORY can
 omit older finals when its byte budget is exceeded. See the
 [measured evidence](../../experiments/delivery_20261103/README.md) for observed
 freshness, reconnect costs and memory growth.

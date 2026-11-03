@@ -125,14 +125,14 @@ def broadcast_to_queues(event: Event) -> None:
         # Enqueue without waiting for network I/O; each sender handles delivery.
         result = queue.push_caption(
             event.raw, segment=event.segment, revision=event.revision, final=event.final,
-            coalesce=coalesce, drop_older_segments=coalesce,
+            coalesce=coalesce,
         )
         if result is PushResult.FULL:
             # The failed push leaves the backlog intact. Retry atomically,
-            # removing only older queued provisionals replaced by this event.
+            # removing provisionals superseded by newer same-segment revisions.
             result = queue.push_caption(
                 event.raw, segment=event.segment, revision=event.revision,
-                final=event.final, coalesce=True, drop_older_segments=True,
+                final=event.final, coalesce=True,
             )
         if result is PushResult.ACCEPTED:
             continue

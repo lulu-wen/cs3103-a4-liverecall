@@ -80,9 +80,9 @@ On Windows, invoke the existing environment directly with
 
 - Normal mode forwards accepted revisions. Per-client policy uses queue pressure
   and send/queue age with separate entry/exit thresholds.
-- Overload handling may coalesce same-segment provisionals and drop lower-numbered
-  segments' provisionals. The latter assumes sequential source segments;
-  arbitrary interleaved active segments require additional validation.
+- Overload cleanup removes provisional revisions only when a higher revision of
+  the same segment is queued or being admitted. It preserves each active
+  segment's latest version, including when segments interleave.
 - Unresolved admission failure closes the client with 1013. Pong timeout can also
   close it; this does not precisely measure displayed-caption lag.
 - Reconnect reports the last accepted final cursor. The server queues missing

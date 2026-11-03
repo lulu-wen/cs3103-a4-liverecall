@@ -34,12 +34,18 @@ During review, WEN PENG-JU identified a counterexample: a full queue containing
 cross-segment case. A queue-wide correction was implemented in `3497349` with
 five queue regression tests and one loopback scenario.
 
-Later shared integration changed the policy again: current code can discard
-lower-numbered segments' provisionals when `drop_older_segments=True`. This
-assumes the supplied source completes segments sequentially; it must not be
-described as preserving arbitrary interleaved active segments. The historical
-correction and the current implementation are distinct. Human counterexamples
-remain necessary even when generated tests pass.
+Later integration added `drop_older_segments=True`, which could discard a lower
+segment's latest provisional while it was still active. Human review challenged
+that assumption. A 108-case virtual-time experiment reproduced the loss under
+interleaved updates, even with 100% eventual final completeness.
+
+The current correction removes that flag and scans the whole queue for a higher
+revision of each same segment. Only superseded provisionals are removed; finals,
+opaque messages and each active segment's latest version remain protected from
+coalescing. Queue regressions and a gated loopback WebSocket test cover this case.
+The repeated sweep records no useful latest-state drops in the fixed cases.
+These synthetic checks do not replace a full Ubuntu public-test rerun. See the
+[experiment methods and limitations](experiments/overload_thresholds/README.md).
 
 ## Validation and reporting limits
 

@@ -15,8 +15,13 @@ ax.axis("off")
 def box(x, y, width, height, label, color="#ffffff", size=12, edge="#8091a0"):
     ax.add_patch(FancyBboxPatch((x, y), width, height, boxstyle="round,pad=0.2,rounding_size=0.6",
                                facecolor=color, edgecolor=edge, linewidth=1, zorder=2))
-    ax.text(x+width/2, y+height/2, label, ha="center", va="center", fontsize=size,
-            family="DejaVu Sans", color="#172734", zorder=4)
+    lines = label.split("\n")
+    step = size * 0.17
+    for index, line in enumerate(lines):
+        ax.text(x+width/2, y+height/2 + ((len(lines)-1)/2-index)*step,
+                line, ha="center", va="center", fontsize=size,
+                weight="bold" if index == 0 else "normal",
+                family="DejaVu Sans", color="#172734", zorder=4)
 
 def arrow(points, dashed=False, label=None, at=None):
     path = PlotPath(points, [PlotPath.MOVETO] + [PlotPath.LINETO]*(len(points)-1))
@@ -32,8 +37,8 @@ box(22, 3, 72, 24, "", "#edf4ed", edge="#98ad99")
 ax.text(58, 25.2, "Per-client sessions · cleanup + monitoring", ha="center", fontsize=10.5, color="#355339")
 
 box(0.7, 23, 15.8, 17, "Caption source\nfull-text\nrevisions", "#e7eef5")
-box(24, 41, 25, 8, "Revision state\nnewer only; final lock", size=11)
-box(56, 41, 24, 8, "Final history\n90 s / 5,000 items", size=11)
+box(24, 41, 25, 8, "CaptionState\nlatest provisional per segment\nfinalized IDs / revisions", size=10.5)
+box(56, 41, 24, 8, "History\nfull final captions\n90 s / 5,000 items", size=11)
 box(24, 30, 25, 8, "Broadcast + policy\nqueue/send pressure", size=11)
 box(56, 30, 24, 8, "Client handler\nhistory + active state", size=11)
 box(27, 16.5, 24, 7, "Queue 1\n256 msg / 1 MiB", size=11)
