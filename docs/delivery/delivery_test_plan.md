@@ -9,10 +9,9 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -t . -v
 ```
 
-All 110 tests passed on Windows on 31 October 2026 with websockets 16.1.1.
-The original 38 component tests still use only the standard library.
-The code targets Python 3.10+;
-that runtime still needs verification on the team's Ubuntu environment.
+The tested `6dbd7da` snapshot passed 131 tests on Ubuntu Python 3.12.3
+with websockets 16.1.1. This does not verify every supported Python version.
+The original 38 component tests use only the standard library.
 
 | Test | Main checks |
 | --- | --- |
@@ -47,7 +46,7 @@ These tests invoke `push_caption()` directly. Two additional loopback tests
 verify server FULL retries under count and byte limits: normal clients keep all
 revisions while blocked clients receive the in-flight revision followed by the
 replacement final without eviction. Unresolved final backlogs still evict; failed
-admission does not imply successful recovery. Lag-based mode transitions are pending.
+admission does not imply successful recovery. Pressure-based transitions are implemented; see [the policy summary](overload_summary.md).
 
 ## Local server checks completed
 
@@ -76,39 +75,22 @@ python run_demo.py --clients 20 --duration 8 --source-segments 4 --runs 1 --outp
 Keep clients alive long enough for source completion; a three-second exploratory
 run ended receivers before all four segments finished and is not completeness evidence.
 
-## Integration still needed
+## Public measurements completed
 
-- Validate browser reconnect, local recall and HISTORY merge end to end.
-- Integrate semantic overload handling and recovery beyond a single HISTORY budget.
-- Verify final-caption preservation during overload/reconnect.
+T1–T5 each have three current-version Ubuntu runs. T3 also has three before
+runs and one supplementary 300 s RSS observation. See the
+[evidence index](../../experiments/delivery_20261103/README.md) for commands,
+raw outputs, source hashes and limitations.
 
-## Ubuntu T3 (not run yet)
+- Normal T3 clients retained 100% coverage/completeness; slow freshness remains poor.
+- T4 recovered retained finals after the scheduled disconnects.
+- T5 applied the supplied delay/loss profile inside an isolated network namespace.
+- No bandwidth-halving, arbitrary interleaved-source or long-term memory guarantee
+  follows from these measurements.
 
-For formal Ubuntu measurements, use the unchanged public harness:
+## Remaining validation
 
-```bash
-python run_demo.py --clients 100 --duration 60 --runs 3 --slow-percent 10 --slow-ms 500 --output-stem t3
-```
-
-- Keep all run outputs and report medians.
-- Compare normal/slow clients separately: P50/P95/P99, freshness, completeness
-  and update coverage.
-- Observe server RSS in another terminal:
-
-```bash
-python monitor_server.py --pid <SERVER_PID> --duration 60 --output t3_memory_run1.csv
-```
-
-- Restart the observer for each new PID: the runner restarts the server between
-  runs. Use a different output filename each time.
-- Inspect queue limits, in-flight age and transport buffers too. Queue limits
-  alone do not prove bounded process memory.
-
-## Before/after comparison (not measured yet)
-
-- Compare frozen `baseline` with the integrated implementation on the same VM.
-- Keep workload/measurement logic unchanged; use at least three runs each.
-- Record commit IDs, VM resources, versions, queue limits and timeouts.
-- Use [CLI or environment settings](client_delivery.md#experiment-settings) and
-  retain the server's startup settings line. The public runner inherits env values.
-- Report medians and correctness alongside performance. Explain trade-offs.
+- Browser reconnect, local recall and HISTORY rendering need end-to-end review.
+- Oversized history still lacks complete chunked recovery.
+- Validate interleaved active segments and longer connection-churn/RSS behavior.
+- Re-run relevant measurements if runtime code or experiment settings change.

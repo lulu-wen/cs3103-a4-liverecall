@@ -1,0 +1,12 @@
+sequenceDiagram
+    participant C as Browser
+    participant S as Server
+    participant D as State / History
+    C->>S: CLIENT_HELLO + final cursor
+    S->>D: since() + active_snapshot()
+    D-->>S: Finals + latest provisionals
+    Note over S: Enqueue and register without await
+    S-->>C: HISTORY
+    S-->>C: Latest provisional snapshots
+    S-->>C: Live updates
+    Note over C: applyCaption / acceptUpdate

@@ -1,0 +1,14 @@
+# Expanded raw outputs are preserved in the single final evidence archive.
+/evidence/
+# Local repeat workspace and superseded evidence archives.
+/t5_repeat/
+/delivery-evidence-20261103.tar.gz
+/delivery-evidence-full-20261103.tar.gz
+# SVG duplicates remain local; the report uses PNGs.
+/figures/*.svg
+# Local PDF layout verification products; figures remain trackable.
+/network-report-preview.pdf
+/report-page-*.png
+/report-final-page-*.png
+
+/layout-page-*.png

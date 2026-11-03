@@ -1,0 +1,19 @@
+{
+  "theme": "neutral",
+  "fontFamily": "Arial",
+  "themeVariables": {
+    "fontSize": "18px"
+  },
+  "flowchart": {
+    "curve": "linear",
+    "htmlLabels": false,
+    "nodeSpacing": 24,
+    "rankSpacing": 32
+  },
+  "sequence": {
+    "actorFontSize": 18,
+    "messageFontSize": 17,
+    "noteFontSize": 17,
+    "mirrorActors": false
+  }
+}
