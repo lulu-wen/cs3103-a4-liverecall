@@ -62,8 +62,8 @@ On Windows, invoke the existing environment directly with
 
 | Option | Environment fallback | Default |
 | --- | --- | --- |
-| `--queue-max-messages` | `LIVERECALL_QUEUE_MAX_MESSAGES` | 256/client |
-| `--queue-max-bytes` | `LIVERECALL_QUEUE_MAX_BYTES` | 1048576 payload bytes/client |
+| `--queue-max-messages` | `LIVERECALL_QUEUE_MAX_MESSAGES` | 256 in NORMAL FIFO or DEGRADED final/control FIFO |
+| `--queue-max-bytes` | `LIVERECALL_QUEUE_MAX_BYTES` | 1048576 payload bytes per lane; two lanes in DEGRADED |
 | `--send-timeout` | `LIVERECALL_SEND_TIMEOUT` | 10 s |
 | `--close-timeout` | `LIVERECALL_CLOSE_TIMEOUT` | 3 s |
 | `--keepalive-interval` | `LIVERECALL_KEEPALIVE_INTERVAL` | 2 s |
@@ -83,6 +83,11 @@ On Windows, invoke the existing environment directly with
 - Overload cleanup removes provisional revisions only when a higher revision of
   the same segment is queued or being admitted. It preserves each active
   segment's latest version, including when segments interleave.
+- NORMAL uses one 256-message/1 MiB FIFO. DEGRADED separates a final/control
+  FIFO with those limits from a latest-active map capped at 1,000 segments/1 MiB.
+  The scheduler drains a growing final backlog first and gives active state turns
+  when spare service is available. These are separate payload budgets, not a
+  1 MiB cap on all process/socket memory.
 - Unresolved admission failure closes the client with 1013. Pong timeout can also
   close it; this does not precisely measure displayed-caption lag.
 - Reconnect reports the last accepted final cursor. The server queues missing
@@ -104,15 +109,15 @@ python run_demo.py --clients 100 --duration 60 --runs 3 \
   --slow-percent 10 --slow-ms 500 --output-stem t3
 ```
 
-Use `-t .` so test packages do not shadow application packages. The recovery
-export passed 141 tests on Ubuntu and Windows. These tests do not replace
+Use `-t .` so test packages do not shadow application packages. The final-aware
+export passed 158 tests on Ubuntu and Windows. These tests do not replace
 public networking measurements or browser validation.
 
 - [PUBLIC_TESTS.md](PUBLIC_TESTS.md): T1–T5 commands and repetition.
 - [tests/README.md](tests/README.md): test groups and scope.
 - [3 November evidence](experiments/delivery_20261103/README.md): immutable versions,
   raw outputs, RSS traces, plots, methods and limitations.
-- [Recovery rerun evidence](experiments/recovery_batches/README.md): current
+- [Final-aware rerun evidence](experiments/final_aware_delivery/README.md): current
   T1–T5 reruns, complete-state recovery checks, source hashes and updated plots.
 
 T3 before/after evidence shows 100% normal-client coverage/completeness, with slow
@@ -121,7 +126,8 @@ remains poor and reconnect events are nonzero. RSS increased during the five-min
 observation; no leak-free or long-term memory-bound claim is made.
 
 T1, T2, T4 and T5 also have three recorded runs each. All reached 100% final
-completeness. Under T5 delay/loss, P99 live age was 1002.58 ms and freshness 89.12%.
+completeness. In the final-aware export `f115f048f59d`, median per-run T5 P99
+live age was 978.55 ms and Fresh Caption Ratio (500 ms) was 87.36%.
 T5 used an isolated network namespace; the host loopback qdisc remained unchanged.
 
 ## Submission documents

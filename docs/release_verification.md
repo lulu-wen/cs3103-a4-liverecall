@@ -5,7 +5,7 @@
 - Queue cleanup retains each active segment's latest revision and removes only
   same-segment provisionals superseded by queued or incoming higher revisions.
   Queued finals and opaque messages are not coalesced. Rejected admission is atomic.
-- All 141 Python tests pass on Windows and Ubuntu GB10, including actual loopback
+- All 158 Python tests pass on Windows and Ubuntu GB10, including actual loopback
   WebSockets, gated slow senders, interleaved updates, recovery and cleanup.
 - `python submission_check.py --final` passes locally: required paths exist and
   the server accepts a WebSocket CLIENT_HELLO within the startup deadline.
@@ -18,6 +18,10 @@
 - RecoveryPlan preflights individual messages and streams bounded HISTORY batches,
   active snapshots and then the live queue. The 15-run Ubuntu oracle experiment
   verifies every required payload and measures actual full-state completion.
+- The final-aware evidence verifier matches runtime/test hashes against the
+  exact tested export and public medians against the retained raw outputs.
+  Controlled final-heavy cases retain all finals/latest active state, but the
+  History capacity probe exposes truncation above about 83 finals/s.
 - README, AI_USAGE, CONTRIBUTIONS and report.pdf are present. Private study notes,
   virtual environments, expanded raw experiment folders and superseded archives
   remain outside the committed submission.
@@ -27,12 +31,13 @@
 - Public T1–T5 were run three times on Ubuntu GB10 for snapshot `6dbd7da`.
   T3 also compares `acef9a3`. See the retained
   [methods and evidence](../experiments/delivery_20261103/README.md).
-- The new [recovery export](../experiments/recovery_batches/README.md), identified
-  by source manifest `f630bc443b7a`, reran T1–T5 three times each on Ubuntu and
-  repeated the 300-second workload. All runs had 100% final completeness;
-  T1/T2 had 100% Normal Update Coverage. T3 still recorded 20 reconnect errors
-  per run and poor slow-client freshness. Report numbers now use this export;
-  the historical `acef9a3` T3 baseline remains explicitly labeled.
+- The [final-aware export](../experiments/final_aware_delivery/README.md),
+  identified by source manifest `f115f048f59d`, reran T1–T5 three times each
+  on Ubuntu and repeated the 300-second workload. Every public run had 100%
+  final completeness; T1/T2 had 100% Normal Update Coverage. T3 still records
+  20 reconnect errors and poor slow-client freshness. Report numbers use this
+  export; historical `acef9a3` remains explicitly labeled. All 15 final-aware
+  controlled scheduler cases preserve finals and latest active state.
 - The repeated 300-second RSS observation increases over time. It neither proves
   a memory leak nor demonstrates a stable memory plateau; queue/state/task
   instrumentation is needed to identify the main contributor.
@@ -50,7 +55,8 @@
   validate rendering, scrolling or the recorded demo.
 - Batched HISTORY no longer omits retained finals at a total-response byte budget.
   Count-pruned/expired finals and individually oversized items remain limits.
-  Eviction/teardown can discard queued data; final-aware scheduling remains open.
+  Final-aware scheduling now separates bounded final/control FIFO and latest-active
+  map. Hard lane exhaustion and teardown can still discard pending data.
   A successful HISTORY response is not proof that every missing final returned.
 - Slow-reader freshness, sustained overload and long-term memory behavior remain
   limitations. Preserving useful provisional state can increase backlog or

@@ -6,6 +6,8 @@
 | --- | --- |
 | OpenAI Codex | Drafting delivery queues/senders/lifecycle/monitoring, integration tests, code explanations, documentation and experiment/plotting helpers |
 | OpenAI Codex with Google Drive/Docs tools | Drafting code-grounded report sections and inserting measured tables/figures into the shared report |
+| Claude Code | Integration tests, code, code explanations, script drafting |
+
 
 The record covers assistance documented in this project's development history.
 Each member should verify that their own tool use is represented before final submission.
@@ -66,6 +68,23 @@ These synthetic checks do not replace a full Ubuntu public-test rerun. See the
 - Relative privileged commands were found to target an older experiment directory.
   Absolute paths and process/source checks corrected this; overlapping T4/RSS
   measurements were retained separately and replaced by serialized accepted runs.
+
+## Final-aware delivery revision
+
+- AI assisted implementation of NORMAL FIFO and DEGRADED final/control FIFO
+  plus latest-active map, retaining fixed independent lane bounds. Same-segment
+  latest state is preserved; provisionals do not use the final FIFO's capacity.
+- Review identified that a fixed 4:1 service split would cap finals at 80% even
+  when the receiver can sustain the final-only stream. A backlog override
+  prioritizes finals when at least `min(4, FIFO capacity)` are pending.
+- 158 tests passed on Windows and Ubuntu. Controlled scheduler cases, full
+  T1–T5 reruns, complete recovery checks and one 300 s RSS run are retained in
+  [the final-aware evidence](experiments/final_aware_delivery/README.md).
+- Public T3 slow-reader delay/reconnects persist. The report separates these
+  observations from virtual-time scheduling improvements and does not claim
+  a pure priority optimization, optimal threshold or memory leak freedom.
+- A capacity probe exposes the unchanged 5,000-item History cap truncating 60 s
+  at high final rates; this remains a reported limitation.
 
 ## Responsibility
 
