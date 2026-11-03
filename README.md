@@ -126,7 +126,8 @@ remains poor and reconnect events are nonzero. RSS increased during the five-min
 observation; no leak-free or long-term memory-bound claim is made.
 
 T1, T2, T4 and T5 also have three recorded runs each. All reached 100% final
-completeness. Under T5 delay/loss, P99 live age was 1002.58 ms and freshness 89.12%.
+completeness. In the final-aware export `f115f048f59d`, median per-run T5 P99
+live age was 978.55 ms and Fresh Caption Ratio (500 ms) was 87.36%.
 T5 used an isolated network namespace; the host loopback qdisc remained unchanged.
 
 ## Submission documents
