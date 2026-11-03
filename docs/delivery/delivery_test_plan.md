@@ -9,7 +9,7 @@ pip install -r requirements.txt
 python -m unittest discover -s tests -t . -v
 ```
 
-The tested `6dbd7da` snapshot passed 131 tests on Ubuntu Python 3.12.3
+The recovery export passed 141 tests on Ubuntu Python 3.12.3
 with websockets 16.1.1. This does not verify every supported Python version.
 The original 38 component tests use only the standard library.
 
@@ -19,11 +19,12 @@ The original 38 component tests use only the standard library.
 | `tests/delivery/test_client_sender.py` | Ordered sends, isolation, deadlines, errors and cancellation |
 | `tests/delivery/test_client_session.py` | Registry/task cleanup and repeated cancellation |
 | `tests/delivery/test_client_monitor.py` | Counters, timing, snapshots and transport availability |
+| `tests/delivery/test_client_recovery.py` | UTF-8 batch limits, full ordered snapshots and preflight rejection |
 | `tests/delivery/test_client_delivery.py` | 100 controlled peers, isolation, coalescing with an in-flight send, normal revision coverage and rejected replacement |
 | `tests/server/test_server_delivery.py` | Real loopback WebSockets: HISTORY-first order, two clients, monitors, disconnect/shutdown cleanup, invalid hello, source replacement, full/oversized queue isolation |
 | `tests/server/test_server_config.py` | Defaults, CLI/env precedence, invalid capacities/deadlines, and startup wiring |
 | `tests/captions/test_caption_state.py`, `tests/captions/test_history.py`, `tests/server/test_caption_pipeline.py` | Caption validation, bounded finals history, source-to-client integration |
-| `tests/server/test_server_recovery.py` | History/active/live ordering, resume filtering, UTF-8/message limits, initial capacity rejection, window validation and join during source updates |
+| `tests/server/test_server_recovery.py` | Batched HISTORY/active/live ordering, resume filtering, UTF-8 limits, tiny live queues, window validation and source updates during recovery |
 
 The 100-peer test checks that:
 
@@ -55,9 +56,9 @@ admission does not imply successful recovery. Pressure-based transitions are imp
   [test index](../../tests/README.md) for groups, commands and limitations.
 
 - `delivery/` is connected to `solution_server.py`; the required startup checker passes.
-- Recovery initialization now queues HISTORY followed by the latest active
-  provisional updates. Twelve new loopback tests cover ordering, message limits,
-  count/byte overflow without partial delivery, and invalid recovery requests.
+- Recovery initialization now snapshots retained state and streams bounded HISTORY
+  batches, then active snapshots, before queued live updates. Loopback tests cover
+  message limits, preflight failure and updates during the recovery prefix.
 - A gated server-side send tests overload deterministically over real sockets;
   it is not a real TCP slow-reader measurement.
 - An eight-second, 20-client smoke run with four source segments delivered
@@ -79,7 +80,7 @@ run ended receivers before all four segments finished and is not completeness ev
 
 T1–T5 each have three current-version Ubuntu runs. T3 also has three before
 runs and one supplementary 300 s RSS observation. See the
-[evidence index](../../experiments/delivery_20261103/README.md) for commands,
+[current evidence index](../../experiments/recovery_batches/README.md) for commands,
 raw outputs, source hashes and limitations.
 
 - Normal T3 clients retained 100% coverage/completeness; slow freshness remains poor.
@@ -91,6 +92,6 @@ raw outputs, source hashes and limitations.
 ## Remaining validation
 
 - Browser reconnect, local recall and HISTORY rendering need end-to-end review.
-- Oversized history still lacks complete chunked recovery.
-- Validate interleaved active segments and longer connection-churn/RSS behavior.
+- Individually oversized items and count-pruned history remain recovery limits.
+- Validate final-aware overload behavior and longer connection-churn/RSS behavior.
 - Re-run relevant measurements if runtime code or experiment settings change.

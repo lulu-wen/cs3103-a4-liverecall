@@ -25,7 +25,8 @@ reproduced loss of still-useful latest provisionals. See the
 [threshold experiment](../../experiments/overload_thresholds/README.md).
 Keeping these revisions can increase backlog or lead to earlier eviction under
 sustained overload; preservation does not guarantee immediate delivery.
-Initial HISTORY can
-omit older finals when its byte budget is exceeded. See the
+Recovery now streams all selected retained finals in bounded HISTORY batches;
+expired/count-pruned entries, individual message limits and live-queue overflow
+remain limitations. See the
 [measured evidence](../../experiments/delivery_20261103/README.md) for observed
 freshness, reconnect costs and memory growth.

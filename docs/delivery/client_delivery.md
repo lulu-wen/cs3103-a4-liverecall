@@ -12,6 +12,7 @@ state, recovery and a per-client overload policy.
 | `client_sender.py` | Send one queue's messages in order |
 | `client_session.py` | Register the client, supervise tasks and clean up |
 | `client_monitor.py` | Report queue, send and transport-buffer state |
+| `client_recovery.py` | Snapshot recovery state and split HISTORY into bounded batches |
 
 ## Assignment requirements covered
 
@@ -34,7 +35,8 @@ Current server wiring:
   NORMAL admission preserves revisions; DEGRADED admission enables coalescing
   across the queue. FULL retries once with coalescing enabled.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
-- HISTORY and the latest active provisional updates are queued before registration.
+- A bounded recovery snapshot is captured before registration. The sender streams
+  HISTORY batches, then active snapshots, before taking messages from the live queue.
 - Default queue caps: 256 messages and 1 MiB of encoded payloads per connection.
 - Unresolved admission failure unregisters the client and starts one tracked close task
   (code 1013). The handler awaits/removes that task and its monitor on exit.
@@ -65,17 +67,16 @@ result = queue.push_caption(
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
 - Current live broadcasts enable coalescing in degraded mode or on a FULL retry.
-  Initial context still uses
-  `push()`, so these opaque initial messages are not replacement candidates.
+  Recovery is a separate immutable prefix, not a coalescing candidate.
 - A coalescing push scans the bounded queue; normal pushes remain constant-time
   apart from UTF-8 byte counting.
 
 ## Recovery initialization
 
-`handle_client()` in `solution_server.py` prepares this FIFO before starting the sender:
+`handle_client()` captures a `RecoveryPlan` before starting the session:
 
 ```text
-HISTORY (finals only) -> latest active provisional updates -> later live updates
+HISTORY batch 1 -> ... -> HISTORY batch N -> latest active updates -> live queue
 ```
 
 - Resume cursors must be non-negative integers (not booleans).
@@ -83,14 +84,32 @@ HISTORY (finals only) -> latest active provisional updates -> later live updates
   capped at 60. Omitted fields default to cursor 0/0 and 30 seconds.
 - Invalid recovery fields close with code 1008 before creating delivery resources.
 - Each initial message must fit the client's 1 MiB limit, even with a larger queue.
-- The HISTORY budget is `min(queue byte limit, 1 MiB)`. Existing history selection
-  keeps newer context if older items do not fit; this is not chunked recovery.
-- Every initial push must succeed. If the combined count/bytes cannot fit, clear
-  the queue and close with 1013 before registration or sending any partial context.
+- Each HISTORY batch is at most `min(queue byte limit, 1 MiB)`. All selected
+  retained finals are included, oldest first; a large total is split, not truncated.
+- Preflight every final and active message before registering. If one item cannot
+  fit its message limit, close with 1013 before sending any partial context.
+- The plan shares immutable strings from bounded history/state: at most 5,000
+  final references and 1,000 active references with current settings. It stores
+  batch index ranges and serializes one batch at a time. The live queue retains
+  its separate 256-message/1 MiB bound. Snapshot references are released when the
+  sender finishes the prefix or the session is torn down.
 - There is no await from context selection through successful registration;
   source updates cannot interleave and create a history-to-live gap.
-- This does not guarantee all missed finals when history exceeds the byte budget;
-  complete oversized recovery remains a limitation.
+- Source updates during recovery enter the bounded live queue. If that queue
+  overflows, normal eviction rules still apply; recovery does not guarantee
+  delivery under sustained overload or after disconnect.
+- Count-pruned or expired history cannot be recovered. This change fixes
+  transmission batching, not the adequacy of history capacity for every source rate.
+- Multiple HISTORY messages occur only in response to CLIENT_HELLO. No unsolicited
+  HISTORY is sent during ordinary live delivery. Existing browser/public clients
+  merge each batch through their normal revision checks.
+
+## Measuring complete recovery
+
+The public harness measures connection-to-HISTORY response time. Our additional
+[oracle experiment](../../experiments/recovery_batches/README.md) records completion
+only after every expected final and latest active payload has arrived correctly.
+It reports missing/duplicate state separately; receiving one batch is not enough.
 
 ## Lifecycle rules
 

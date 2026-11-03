@@ -58,6 +58,14 @@ These synthetic checks do not replace a full Ubuntu public-test rerun. See the
 - Slow-client reconnect errors and upward RSS growth are reported explicitly.
   Passing tests and a short memory trace do not establish complete spec compliance.
 - Diagrams retain editable Mermaid/Python sources and rendered PNGs.
+- Recovery batching was added after review found that initial context could
+  exceed one message or the live queue. An independent expected-state oracle
+  verifies all finals and latest active payloads before reporting full recovery
+  time. The unchanged public T1–T5 tools were rerun on Ubuntu; the new results
+  and source hashes are in [the recovery evidence](experiments/recovery_batches/README.md).
+- Relative privileged commands were found to target an older experiment directory.
+  Absolute paths and process/source checks corrected this; overlapping T4/RSS
+  measurements were retained separately and replaced by serialized accepted runs.
 
 ## Responsibility
 
