@@ -6,6 +6,8 @@
 | --- | --- |
 | OpenAI Codex | Drafting delivery queues/senders/lifecycle/monitoring, integration tests, code explanations, documentation and experiment/plotting helpers |
 | OpenAI Codex with Google Drive/Docs tools | Drafting code-grounded report sections and inserting measured tables/figures into the shared report |
+| Claude Code | Integration tests, code, code explanations, script drafting |
+
 
 The record covers assistance documented in this project's development history.
 Each member should verify that their own tool use is represented before final submission.
