@@ -5,8 +5,10 @@ sequenceDiagram
     C->>S: CLIENT_HELLO + final cursor
     S->>D: since() + active_snapshot()
     D-->>S: Finals + latest provisionals
-    Note over S: Enqueue and register without await
-    S-->>C: HISTORY
+    Note over S: Snapshot, preflight and register without await
+    loop Bounded batches, no omitted retained finals
+        S-->>C: HISTORY (oldest first, each <=1 MiB)
+    end
     S-->>C: Latest provisional snapshots
     S-->>C: Live updates
     Note over C: applyCaption / acceptUpdate

@@ -1,8 +1,9 @@
 # Project checklist
 
 For the current evidence and remaining submission work, see
-[the 3 November verification](release_verification.md). Public-test results
-predate the latest semantic-cleanup fix and need a final Ubuntu rerun.
+[the 3 November verification](release_verification.md). Ubuntu reruns cover the
+bounded-recovery export in `experiments/recovery_batches/`; remaining overload
+and retention limitations are documented separately from passed measurements.
 
 Source: assignment specification, last updated 17 October 2026. Section numbers
 below refer to that document. Check an item only after its behavior is integrated
@@ -164,7 +165,7 @@ Use the unchanged public harness; commands are in [PUBLIC_TESTS.md](../PUBLIC_TE
 
 - [x] Implement and independently test bounded queue, sender, lifecycle cleanup
   and monitoring modules in `delivery/`.
-- [x] Pass 135 local component/integration/configuration tests, including 100 controlled
+- [x] Pass 141 component/integration/configuration tests on Windows and Ubuntu, including 100 controlled
   connections with ten blocked senders and real loopback server tests.
   These are not Ubuntu public-test results.
 - [x] Implement and test revision state and bounded history in `captions/`

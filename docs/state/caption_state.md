@@ -105,9 +105,12 @@ Covers spec section 3 #1, #2, #7 (server side), #8 and section 4.1. Code:
 ## Recovery integration status
 
 - `handle_client` serves finalized HISTORY followed by `STATE.active_snapshot()`.
-- Initial messages are admitted before registration with no intervening await;
-  insufficient queue capacity closes the client before any context is sent.
-- HISTORY is limited to the smaller of queue bytes and the client's 1 MiB limit.
-  Older context may be omitted under that budget; chunked recovery is not implemented.
-- Browser HISTORY items use `applyCaption(item)`; full browser recovery validation
-  and semantic overload handling remain pending.
+- RecoveryPlan snapshots retained finals and active state before registration,
+  without an intervening await. The sender streams this prefix before live updates.
+- Each HISTORY batch fits the smaller of queue bytes and the client's 1 MiB limit;
+  all selected retained finals are included across batches. An individually
+  oversized item is rejected before partial recovery, and count/time retention
+  can still remove older context.
+- Browser HISTORY items use `applyCaption(item)` for every batch. The Ubuntu
+  oracle checks full recovery; browser walkthrough and final-aware overload
+  scheduling remain separate validation/design work.

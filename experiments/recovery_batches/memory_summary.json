@@ -1,0 +1,13 @@
+{
+  "t3_peak_mib_by_pid": {
+    "4126039": 33.3633,
+    "4128761": 33.3555,
+    "4131447": 33.3828
+  },
+  "long_samples": 618,
+  "long_duration_s": 308.891,
+  "early_median_mib": 32.14453125,
+  "late_median_mib": 36.46484375,
+  "after_60s_slope_mib_per_minute": 0.6992014595927515,
+  "long_peak_mib": 36.48046875
+}

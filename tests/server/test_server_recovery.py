@@ -112,23 +112,26 @@ class ServerRecoveryTests(unittest.IsolatedAsyncioTestCase):
             raw = await asyncio.wait_for(ws.recv(), 3)
         self.assertLessEqual(len(raw.encode("utf-8")), 2**20)
         history = json.loads(raw)
-        self.assertEqual([item["segment"] for item in history["items"]], [2, 3])
+        self.assertEqual([item["segment"] for item in history["items"]], [1, 2])
         self.assertTrue(all(item["final"] for item in history["items"]))
+        self.assertEqual([item["segment"] for item in (await self.receive(ws))["items"]], [3])
 
-    async def test_initial_count_overflow_sends_no_partial_history(self):
-        self.seed(1)
-        self.seed(2, final=False)
+    async def test_recovery_prefix_does_not_require_all_messages_in_live_queue(self):
+        final, _ = self.seed(1)
+        active, _ = self.seed(2, final=False)
         with patch.object(app, "QUEUE_MAX_MESSAGES", 1):
             ws = await self.student()
-            await self.assert_rejected_without_context(ws)
+            self.assertEqual(await self.receive(ws), {"type": "HISTORY", "items": [final]})
+            self.assertEqual(await self.receive(ws), active)
 
-    async def test_initial_total_bytes_overflow_sends_no_partial_history(self):
-        _, final_raw = self.seed(1, text="x" * 100)
-        _, active_raw = self.seed(2, final=False, text="y" * 100)
+    async def test_recovery_total_can_exceed_live_queue_byte_budget(self):
+        final, final_raw = self.seed(1, text="x" * 100)
+        active, active_raw = self.seed(2, final=False, text="y" * 100)
         limit = max(len(history_message([final_raw]).encode()), len(active_raw.encode()))
         with patch.object(app, "QUEUE_MAX_BYTES", limit):
             ws = await self.student()
-            await self.assert_rejected_without_context(ws)
+            self.assertEqual(await self.receive(ws), {"type": "HISTORY", "items": [final]})
+            self.assertEqual(await self.receive(ws), active)
 
     async def test_active_payload_must_also_fit_client_message_limit(self):
         _, raw = self.seed(1, final=False, text="x" * 100)
@@ -170,6 +173,49 @@ class ServerRecoveryTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(app, "QUEUE_MAX_MESSAGES", 1):
             ws = await self.student()
             self.assertEqual(await self.receive(ws), {"type": "HISTORY", "items": [first]})
+
+    async def test_live_updates_during_batched_recovery_follow_entire_snapshot(self):
+        expected = [self.seed(s, text="x" * 300)[0] for s in range(1, 7)]
+        active, _ = self.seed(7, final=False)
+        original_session = app.run_client_session
+        blocked, release = asyncio.Event(), asyncio.Event()
+        captured_queue = []
+
+        async def gated_session(ws, queue, clients, **kwargs):
+            original_send = ws.send
+            captured_queue.append(queue)
+
+            async def send(raw):
+                if not blocked.is_set():
+                    blocked.set()
+                    await release.wait()
+                await original_send(raw)
+
+            with patch.object(ws, "send", send):
+                await original_session(ws, queue, clients, **kwargs)
+
+        try:
+            with patch.object(app, "run_client_session", gated_session), \
+                    patch.object(app, "CLIENT_MAX_MESSAGE_BYTES", 700):
+                ws = await self.student()
+                await asyncio.wait_for(blocked.wait(), 3)
+                source = await self.stack.enter_async_context(connect(self.uri))
+                await source.send('{"type":"SOURCE_HELLO","session":"L1"}')
+                live = self.caption(7, revision=2)
+                await source.send(json.dumps(live))
+                await self.wait_until(lambda: captured_queue[0].stats().depth == 1)
+                release.set()
+                recovered = []
+                while len(recovered) < len(expected):
+                    frame = await self.receive(ws)
+                    self.assertEqual(frame["type"], "HISTORY")
+                    recovered.extend(frame["items"])
+                self.assertEqual(recovered, expected)
+                self.assertEqual(await self.receive(ws), active)
+                self.assertEqual(await self.receive(ws), live)
+                self.assertFalse(app.EVICTIONS)
+        finally:
+            release.set()
 
     async def test_join_during_source_burst_has_no_missing_or_duplicate_finals(self):
         self.seed(1)

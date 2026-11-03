@@ -88,7 +88,9 @@ On Windows, invoke the existing environment directly with
 - Reconnect reports the last accepted final cursor. The server queues missing
   recent finals, then current provisional snapshots, before live updates.
 - History is bounded to 90 s/5,000 items. Recovery requests are capped at 60 s;
-  oversized HISTORY retains only newer context fitting its byte budget.
+  selected retained finals are streamed in HISTORY batches of at most 1 MiB,
+  followed by active snapshots and queued live updates. Expired/count-pruned
+  history and individually oversized messages remain limitations.
 - Browser caption state/cursor are page-local; refresh resets them. sessionStorage
   currently retains only the client ID. Normal recall reads local finals.
 
@@ -102,14 +104,16 @@ python run_demo.py --clients 100 --duration 60 --runs 3 \
   --slow-percent 10 --slow-ms 500 --output-stem t3
 ```
 
-Use `-t .` so test packages do not shadow application packages. The tested
-`6dbd7da` snapshot passed 131 tests on Ubuntu. These tests do not replace
+Use `-t .` so test packages do not shadow application packages. The recovery
+export passed 141 tests on Ubuntu and Windows. These tests do not replace
 public networking measurements or browser validation.
 
 - [PUBLIC_TESTS.md](PUBLIC_TESTS.md): T1–T5 commands and repetition.
 - [tests/README.md](tests/README.md): test groups and scope.
 - [3 November evidence](experiments/delivery_20261103/README.md): immutable versions,
   raw outputs, RSS traces, plots, methods and limitations.
+- [Recovery rerun evidence](experiments/recovery_batches/README.md): current
+  T1–T5 reruns, complete-state recovery checks, source hashes and updated plots.
 
 T3 before/after evidence shows 100% normal-client coverage/completeness, with slow
 final completeness improving from 51.32% to 100% at the cutoff. Slow freshness

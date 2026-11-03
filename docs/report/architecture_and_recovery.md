@@ -4,19 +4,19 @@ Code-grounded report material for source snapshot `6dbd7da`.
 
 ## 1.1 System Architecture
 
-The supplied caption_source.py emits full-text revisions over WebSocket. A single asyncio server routes source and student connections by their first hello message. CaptionState validates updates and retains the latest active state; History stores recent finals. Every student connection has an independent bounded queue, sender and supervised session. The browser is served separately over HTTP and maintains its own display and local recall state. All lecture state is in memory, shared across source reconnects and lost on server restart.
+The supplied caption_source.py emits full-text revisions over WebSocket. A single asyncio server routes source and student connections by their first hello message. CaptionState validates updates and retains the latest active state; History stores recent finals. Every student connection has an independent bounded live queue, sender and supervised session. RecoveryPlan snapshots retained finals and active state; the same sender streams this recovery prefix before live delivery. The browser is served separately over HTTP and maintains its own display and local recall state. All lecture state is in memory, shared across source reconnects and lost on server restart.
 
 ![System architecture](figures/system_architecture.png)
 
-Figure 1. `CaptionState` retains each active segment's latest provisional and finalized IDs/revisions. `History` retains full final messages for recovery. Each client owns an independent queue/sender; dashed paths show recovery and control.
+Figure 1. `CaptionState` retains each active segment's latest provisional and finalized IDs/revisions. `History` retains full final messages for recovery. Each client owns an independent live queue/sender; RecoveryPlan supplies a bounded prefix directly to the sender. Dashed paths show recovery and control.
 
 ## 1.2 Application Protocol
 
-Messages are JSON text frames. SOURCE_HELLO identifies a source; CLIENT_HELLO supplies client_id, session, the last accepted final segment/revision and a requested history window. CAPTION_UPDATE carries session, segment, revision, source_ts, final and the complete text for that revision. HISTORY contains an oldest-first array of finalized CAPTION_UPDATE objects. Initial HISTORY precedes active snapshots and later live updates. SOURCE_DONE reports source completion for diagnostics. Hello/session fields route traffic; they do not provide authentication or independent multi-lecture state.
+Messages are JSON text frames. SOURCE_HELLO identifies a source; CLIENT_HELLO supplies client_id, session, the last accepted final segment/revision and a requested history window. CAPTION_UPDATE carries session, segment, revision, source_ts, final and the complete text for that revision. HISTORY contains an oldest-first array of finalized CAPTION_UPDATE objects. Recovery may use multiple oldest-first HISTORY batches following CLIENT_HELLO; they precede active snapshots and later live updates. No unsolicited HISTORY is used for ordinary live delivery. SOURCE_DONE reports source completion for diagnostics. Hello/session fields route traffic; they do not provide authentication or independent multi-lecture state.
 
 ## 2.1 Revision State and Bounded History
 
-The server accepts an active segment only at a strictly newer revision and rejects all changes after finalization. The browser independently applies equivalent revision/final rules. Server state caps active segments at 1,000 and remembered final revisions at 10,000; a segment watermark rejects forgotten ranges. Full finals are retained separately for 90 seconds and at most 5,000 items. Retention uses server monotonic acceptance time, with pruning on insertion/query. Count and message-size limits can shorten the recoverable context under high load.
+The server accepts an active segment only at a strictly newer revision and rejects all changes after finalization. The browser independently applies equivalent revision/final rules. Server state caps active segments at 1,000 and remembered final revisions at 10,000; a segment watermark rejects forgotten ranges. Full finals are retained separately for 90 seconds and at most 5,000 items. Retention uses server monotonic acceptance time, with pruning on insertion/query. Count limits can shorten retained context under high load. Transmission batching avoids omitting retained finals just because their combined size exceeds one message.
 
 ## 2.2 Local Recall and Browser Behavior
 
@@ -24,11 +24,11 @@ Live and recovered captions share applyCaption()/acceptUpdate(), so accepted rev
 
 ## 2.3 Reconnect and Late-Join Recovery
 
-After closure, the browser retries after three seconds and reports its latest accepted final cursor; a fresh page sends 0/0. The client ID persists in sessionStorage, while caption state/cursor remain in page memory and reset on refresh. The server validates the cursor/window, caps requests at 60 seconds and selects missing finals within a 1 MiB message budget. It queues HISTORY and each active segment's latest provisional before registration, without an intervening await. Initial admission is all-or-nothing; oversized history can omit older finals. Recovery therefore depends on retention and capacity, not merely a successful reconnect.
+After closure, the browser retries after three seconds and reports its latest accepted final cursor; a fresh page sends 0/0. Caption state is page-local; sessionStorage preserves only the client ID. The server validates the request, caps its window at 60 seconds, and snapshots all selected retained finals plus latest active updates without yielding before registration. RecoveryPlan preflights individual messages and splits finals into HISTORY batches, each at most min(queue byte limit, 1 MiB). The sender streams batches, then active snapshots, before consuming the bounded live queue. The plan shares at most 5,000 final and 1,000 active strings and builds one batch at a time. Oversized individual messages fail before partial delivery. Retention/count limits, disconnects and live-queue overflow remain limits.
 
 ![Reconnect recovery](figures/reconnect_recovery.png)
 
-Figure 2. Initial HISTORY, active snapshots and live delivery share one client FIFO.
+Figure 2. The sender streams bounded HISTORY batches and active snapshots before consuming the live FIFO. Snapshot and registration have no intervening await.
 
 ## Code locations
 

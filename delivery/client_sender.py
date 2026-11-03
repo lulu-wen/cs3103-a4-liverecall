@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from collections.abc import Iterable
 from typing import Protocol
 
 from .client_monitor import ClientMonitor
@@ -30,6 +31,7 @@ async def run_client_sender(
     close_timeout: float = 3.0,
     monitor: ClientMonitor | None = None,
     experiment_send_delay: float = 0.0,
+    initial_messages: Iterable[str | bytes] = (),
 ) -> None:
     """Consume one client's queue and send payloads sequentially.
 
@@ -43,6 +45,7 @@ async def run_client_sender(
 
     The limits here are configurable safety deadlines, not lag detection or a
     semantic overload policy. Queue rejection remains the producer's concern.
+    initial_messages must be a bounded snapshot iterator, not a live producer.
     """
     for name, value in (("send_timeout", send_timeout), ("close_timeout", close_timeout)):
         if (isinstance(value, bool) or not isinstance(value, (int, float))
@@ -56,11 +59,20 @@ async def run_client_sender(
 
     close_code = 1000
     close_reason = "Sender stopped"
+    initial = iter(initial_messages)
     try:
         while True:
             try:
-                # Wait when empty; send timing starts only after a payload is dequeued.
-                payload = await queue.get()
+                # The immutable recovery prefix precedes every queued live update.
+                if initial is not None:
+                    try:
+                        payload = next(initial)
+                    except StopIteration:
+                        initial = None  # Release snapshot references after recovery.
+                        continue
+                else:
+                    # Wait when empty; send timing starts only after selecting a payload.
+                    payload = await queue.get()
             except QueueClosed:
                 return
             outcome = "error"

@@ -28,9 +28,10 @@ from typing import Any
 from websockets.asyncio.server import serve
 from websockets.exceptions import ConnectionClosed
 
-from captions.history import History, history_message
+from captions.history import History
 from captions.state import CaptionState, Event
 from delivery.client_monitor import ClientMonitor, DeliveryStats
+from delivery.client_recovery import RecoveryPlan
 from delivery.client_queue import ClientQueue, PushResult
 from delivery.client_session import run_client_session
 from delivery.overload_policy import OverloadMode, OverloadPolicy
@@ -54,7 +55,7 @@ EXPERIMENT_SEND_DELAY = 0.0
 # has read every frame sent before the ping, so a client more than about
 # KEEPALIVE_TIMEOUT seconds behind is closed by the library (code 1011,
 # "keepalive ping timeout"). It reconnects with its resume cursor and gets the
-# finals it missed in one HISTORY message. These pings replace the library's
+# finals it missed in bounded HISTORY batches. These pings replace the library's
 # default 20 s keepalive rather than adding traffic.
 KEEPALIVE_INTERVAL = 2.0
 KEEPALIVE_TIMEOUT = 5.0
@@ -215,29 +216,26 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
         return
     client_history_seconds = min(client_history_seconds, MAX_RECOVERY_SECONDS)
 
-    # Prepare one FIFO: finalized context first, then current provisional state.
+    # Snapshot finalized context and active state before registration.
     # No await until registration, so source updates cannot slip into this gap.
     queue = ClientQueue(max_messages=QUEUE_MAX_MESSAGES, max_bytes=QUEUE_MAX_BYTES)
     items = HISTORY.since(
         last_segment=client_last_segment,
         last_revision=client_last_revision,
         seconds=client_history_seconds,
-        max_bytes=min(QUEUE_MAX_BYTES, CLIENT_MAX_MESSAGE_BYTES),
     )
-    initial_messages = [history_message(items), *STATE.active_snapshot()]
-    for message in initial_messages:
-        if len(message.encode("utf-8")) > CLIENT_MAX_MESSAGE_BYTES:
-            result = PushResult.TOO_LARGE
-        else:
-            result = queue.push(message)
-        if result is not PushResult.ACCEPTED:
-            break
-    if result is not PushResult.ACCEPTED:
-        # No sender has started: discard the whole batch, never send a partial
-        # initial context or register a client with a missing active snapshot.
+    try:
+        plan = RecoveryPlan.build(
+            items, STATE.active_snapshot(),
+            max_message_bytes=min(QUEUE_MAX_BYTES, CLIENT_MAX_MESSAGE_BYTES),
+        )
+    except ValueError:
+        # Reject an individually unrepresentable item, never silently omit it.
         queue.close()
         await ws.close(code=1013, reason="Initial context exceeds delivery limits")
         return
+    initial_messages = plan.messages()
+    del plan, items  # Only the sender iterator owns the snapshot while recovering.
 
     monitor = ClientMonitor()
     MONITORS[ws] = monitor
@@ -246,12 +244,13 @@ async def handle_client(ws, hello: dict[str, Any]) -> None:
     )
     print(f"client connected: id={client_id}", flush=True)
     try:
-        # No await between HISTORY admission and registration: live updates cannot interleave.
+        # No await between snapshot and registration: no history-to-live gap.
         # This await returns only after the session finishes its own cleanup.
         await run_client_session(
             ws, queue, CLIENTS, monitor=monitor,
             send_timeout=CLIENT_SEND_TIMEOUT, close_timeout=CLIENT_CLOSE_TIMEOUT,
             experiment_send_delay=EXPERIMENT_SEND_DELAY,
+            initial_messages=initial_messages,
         )
     except (ConnectionClosed, asyncio.TimeoutError, OSError) as exc:
         print(f"client send ended: id={client_id}; reason={exc!r}", flush=True)
