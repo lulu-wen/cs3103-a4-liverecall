@@ -190,11 +190,8 @@ class CaptionQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queue.stats().depth, 0)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 class CrossSegmentSemanticCoalescingTests(unittest.IsolatedAsyncioTestCase):
-    async def test_degraded_mode_drops_only_older_segment_provisionals(self):
+    async def test_degraded_mode_preserves_latest_interleaved_provisional(self):
         q = ClientQueue(max_messages=10, max_bytes=10000)
         self.assertIs(q.push_caption("s1-p", segment=1, revision=1, final=False), PushResult.ACCEPTED)
         self.assertIs(q.push_caption("s1-f", segment=1, revision=2, final=True), PushResult.ACCEPTED)
@@ -203,11 +200,12 @@ class CrossSegmentSemanticCoalescingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(
             q.push_caption(
                 "s3-p", segment=3, revision=1, final=False,
-                coalesce=True, drop_older_segments=True,
+                coalesce=True,
             ),
             PushResult.ACCEPTED,
         )
         self.assertEqual(await q.get(), "s1-f")
+        self.assertEqual(await q.get(), "s2-p")
         self.assertEqual(await q.get(), "opaque")
         self.assertEqual(await q.get(), "s3-p")
 
@@ -219,14 +217,53 @@ class CrossSegmentSemanticCoalescingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await q.get(), "s1-p")
         self.assertEqual(await q.get(), "s2-p2")
 
-    async def test_cross_segment_cleanup_never_removes_finals(self):
+    async def test_queue_wide_cleanup_never_removes_finals(self):
         q = ClientQueue(max_messages=10, max_bytes=10000)
         q.push_caption("s1-f", segment=1, revision=3, final=True)
         q.push_caption("s2-f", segment=2, revision=3, final=True)
         q.push_caption(
             "s3-f", segment=3, revision=3, final=True,
-            coalesce=True, drop_older_segments=True,
+            coalesce=True,
         )
         self.assertEqual(await q.get(), "s1-f")
         self.assertEqual(await q.get(), "s2-f")
         self.assertEqual(await q.get(), "s3-f")
+
+    async def test_cleanup_removes_superseded_versions_across_entire_queue(self):
+        q = ClientQueue(max_messages=5, max_bytes=1000)
+        q.push_caption("s1-old", segment=1, revision=1, final=False)
+        q.push_caption("s2-old", segment=2, revision=1, final=False)
+        q.push_caption("s1-latest", segment=1, revision=2, final=False)
+        q.push_caption("s2-final", segment=2, revision=2, final=True)
+        q.push("history")
+        self.assertIs(q.push_caption("s3-new", segment=3, revision=1,
+                                     final=False, coalesce=True), PushResult.ACCEPTED)
+        self.assertEqual(q.stats().pending_bytes,
+                         len("s1-latest" + "s2-final" + "history" + "s3-new"))
+        self.assertEqual([await q.get() for _ in range(4)],
+                         ["s1-latest", "s2-final", "history", "s3-new"])
+
+    async def test_full_queue_keeps_unsuperseded_active_segments(self):
+        for max_bytes in (100, 4):
+            with self.subTest(max_bytes=max_bytes):
+                q = ClientQueue(max_messages=2, max_bytes=max_bytes)
+                q.push_caption("aa", segment=10, revision=2, final=False)
+                q.push_caption("bb", segment=11, revision=1, final=False)
+                self.assertIs(q.push_caption("cc", segment=12, revision=1,
+                                             final=False, coalesce=True), PushResult.FULL)
+                self.assertEqual(q.stats().pending_bytes, 4)
+                self.assertEqual([await q.get(), await q.get()], ["aa", "bb"])
+
+    async def test_failed_global_cleanup_is_atomic(self):
+        q = ClientQueue(max_messages=4, max_bytes=10)
+        q.push_caption("aa", segment=1, revision=1, final=False)
+        q.push_caption("bb", segment=1, revision=2, final=False)
+        q.push_caption("cc", segment=2, revision=1, final=False)
+        self.assertIs(q.push_caption("1234567", segment=3, revision=1,
+                                     final=False, coalesce=True), PushResult.FULL)
+        self.assertEqual(q.stats().pending_bytes, 6)
+        self.assertEqual([await q.get() for _ in range(3)], ["aa", "bb", "cc"])
+
+
+if __name__ == "__main__":
+    unittest.main()

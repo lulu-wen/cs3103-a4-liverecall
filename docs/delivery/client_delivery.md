@@ -32,7 +32,7 @@ Current server wiring:
 - `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
 - `broadcast_to_queues()` calls `push_caption()` without waiting on socket writes.
   NORMAL admission preserves revisions; DEGRADED admission enables coalescing
-  and older-segment dropping. FULL retries once with both flags enabled.
+  across the queue. FULL retries once with coalescing enabled.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
 - HISTORY and the latest active provisional updates are queued before registration.
 - Default queue caps: 256 messages and 1 MiB of encoded payloads per connection.
@@ -49,22 +49,22 @@ validated caption metadata:
 ```python
 result = queue.push_caption(
     event.raw, segment=event.segment, revision=event.revision,
-    final=event.final, coalesce=degraded, drop_older_segments=degraded,
+    final=event.final, coalesce=degraded,
 )
 ```
 
 - `degraded` is chosen by the overload policy; the queue does not detect overload.
 - With `coalesce=False` (default), every revision is queued normally.
-- With `coalesce=True`, admission replaces queued older provisional revisions
-  of the same segment, appending the new update after the remaining messages.
-- With `drop_older_segments=True`, provisionals of lower-numbered segments are
-  also candidates. This assumes sequential source segments and can remove an
-  interleaved segment's latest provisional. Finals, opaque HISTORY and in-flight
-  sends are never coalesced.
+- With `coalesce=True`, scan the entire queue and remove a provisional only if
+  a higher revision of that same segment is queued or being admitted. A queued
+  final can supersede older provisionals. Keep every active segment's latest
+  version, regardless of segment ID or interleaving.
+- Finals, opaque HISTORY and in-flight sends are never coalesced. Append the
+  new update after the remaining messages, preserving their FIFO order.
 - If admission still fails, the entire old backlog stays unchanged. Handle the
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
-- Current live broadcasts enable these flags in degraded mode or on a FULL retry.
+- Current live broadcasts enable coalescing in degraded mode or on a FULL retry.
   Initial context still uses
   `push()`, so these opaque initial messages are not replacement candidates.
 - A coalescing push scans the bounded queue; normal pushes remain constant-time

@@ -2,7 +2,7 @@
 
 The policy observes existing delivery measurements; it never owns queue data or
 network I/O.  NORMAL preserves every revision.  DEGRADED lets the producer opt
-into ClientQueue's existing same-segment provisional coalescing.
+into ClientQueue's queue-wide removal of superseded provisional revisions.
 """
 
 from __future__ import annotations
