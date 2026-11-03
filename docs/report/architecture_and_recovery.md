@@ -8,7 +8,7 @@ The supplied caption_source.py emits full-text revisions over WebSocket. A singl
 
 ![System architecture](figures/system_architecture.png)
 
-Figure 1. Source, revision/history and independent client queues/senders. Sessions own cleanup; dashed paths show recovery and control.
+Figure 1. `CaptionState` retains each active segment's latest provisional and finalized IDs/revisions. `History` retains full final messages for recovery. Each client owns an independent queue/sender; dashed paths show recovery and control.
 
 ## 1.2 Application Protocol
 

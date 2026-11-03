@@ -1,7 +1,7 @@
 ﻿flowchart LR
-  SOURCE[Caption source] --> STATE[Revision state: newer revisions and final lock]
+  SOURCE[Caption source] --> STATE[CaptionState: latest provisional per segment and finalized IDs / revisions]
   subgraph SERVER[Server: one asyncio event loop]
-    STATE -->|finals| HISTORY[Bounded final history]
+    STATE -->|finals| HISTORY[History: full final captions, 90 s / 5000 items]
     STATE --> POLICY[Broadcast and per-client overload policy]
     STATE -. active snapshot .-> JOIN[Client handler]
     HISTORY -. recovery .-> JOIN
