@@ -1,60 +1,30 @@
-# LiveRecall - CS3103 Assignment 4
+# LiveRecall — CS3103 Assignment 4
 
-LiveRecall is a classroom caption application: follow live subtitles, review
-recent context with **What did I miss?**, and recover missed captions after reconnecting.
+LiveRecall displays revision-based lecture captions, supports local 15/30/60-second
+recall, and recovers recent finals after reconnecting or joining late. The mandatory
+path uses the supplied deterministic caption source, not an ASR service.
 
 ## Architecture
 
 ```text
-caption_source.py -> solution_server.py -> browser clients
+caption_source.py → solution_server.py → per-client queue/sender → browser
+                         ├─ revision state + active provisional snapshots
+                         ├─ bounded final history
+                         └─ per-client monitoring + overload policy
 ```
 
-- **Caption source:** the supplied deterministic generator produces revisions.
-- **Server:** validates revisions, stores recent finals and serves recovery
-  context before live delivery.
-- **Browser:** displays revisions, keeps local recall and reconnects automatically.
-- **Delivery package:** bounded per-client queues, senders, cleanup and monitoring.
+![System architecture](docs/report/figures/system_architecture.png)
 
-## Current status
-
-- The server now uses bounded per-client queues, senders, cleanup and monitoring.
-- Source updates pass through revision state (stale, duplicate, after-final and
-  malformed updates are dropped) and finals are kept in a bounded 90 s history
-  (`captions/`). Joining/resuming clients receive HISTORY, then the latest active
-  provisional state, before later live updates.
-- A client that falls behind (its keepalive pong is more than 5 s late) is
-  dropped by the server and reconnects with its resume cursor; the browser shows
-  a "Reconnecting" pop-up while it catches up.
-- The browser shows one line per segment, replaces revisions in place and
-  distinguishes provisional from final captions. Local recall, HISTORY merge and
-  fixed-delay reconnect are implemented; full browser recovery validation and
-  semantic overload handling remain pending.
-- Live broadcasts retry FULL with same-segment provisional coalescing; unresolved
-  admission failure temporarily closes that client with code 1013. This
-  fallback does not guarantee delivery/recovery of finals under overload.
-- Local tests pass; Ubuntu public performance results are pending.
-- Track required work in the [project checklist](docs/project_checklist.md).
-
-## Project layout
-
-```text
-solution_server.py   Required server entry point
-caption_source.py    Deterministic caption source
-client/              Browser UI
-captions/            Revision state and bounded caption history
-delivery/            Per-client delivery modules
-tests/               Component/integration tests
-  captions/          Caption revision state and history
-  delivery/          Queues, senders, lifecycle, monitoring and controlled peers
-  server/            Loopback protocol, recovery, pipeline and configuration
-docs/delivery/       Delivery design, test plan and drafts
-docs/state/          Revision state and history design
-```
-
-Run all tests from the repository root: `python -m unittest discover -s tests -t .`.
-See [test groups and commands](tests/README.md).
+- `captions/` validates revisions, locks finals and retains recent context.
+- `delivery/` supplies bounded queues, senders, cleanup, monitoring and overload modes.
+- `client/` renders segment updates, merges HISTORY and stores local recall.
+- Lecture state is in memory and is lost on server restart.
+- Editable diagrams and code-grounded descriptions: [report material](docs/report/architecture_and_recovery.md).
 
 ## Ubuntu setup
+
+Validated environment: Ubuntu 24.04.4 ARM64, Python 3.12.3, websockets 16.1.1.
+The required server path has no cloud/database dependency.
 
 ```bash
 sudo apt update
@@ -65,66 +35,101 @@ pip install -r requirements.txt
 python submission_check.py
 ```
 
-See [START_HERE.md](START_HERE.md) and [UBUNTU_SETUP.md](UBUNTU_SETUP.md) for details.
+See [UBUNTU_SETUP.md](UBUNTU_SETUP.md). Optional `bonus_asr/` dependencies are
+separate from mandatory evaluation.
 
 ## Run the application
 
-Run in separate terminals from the repository root. Activate the virtual
-environment in each terminal that runs the server or source.
+Open three terminals at the repository root and activate the environment in each:
 
 ```bash
-# Server
+# 1. WebSocket server
 python solution_server.py --port 8765
 
-# Browser files: open http://127.0.0.1:8000
+# 2. Browser files: open http://127.0.0.1:8000
 python -m http.server 8000 --directory client
 
-# Caption source
-python caption_source.py --duration 120
+# 3. Deterministic captions
+python caption_source.py --uri ws://127.0.0.1:8765 --duration 120
 ```
 
-The application is incomplete; see [DEMO_GUIDE.md](DEMO_GUIDE.md) for the final demo behavior.
+The browser endpoint is currently `ws://127.0.0.1:8765` in `client/app.js`.
+If changing the server host/port, update this endpoint or use port forwarding.
+On Windows, invoke the existing environment directly with
+`.\.venv\Scripts\python.exe solution_server.py --port 8765`.
 
-## Delivery settings
+## Configuration
 
-The required command still works with the original defaults. For experiments:
+| Option | Environment fallback | Default |
+| --- | --- | --- |
+| `--queue-max-messages` | `LIVERECALL_QUEUE_MAX_MESSAGES` | 256/client |
+| `--queue-max-bytes` | `LIVERECALL_QUEUE_MAX_BYTES` | 1048576 payload bytes/client |
+| `--send-timeout` | `LIVERECALL_SEND_TIMEOUT` | 10 s |
+| `--close-timeout` | `LIVERECALL_CLOSE_TIMEOUT` | 3 s |
+| `--keepalive-interval` | `LIVERECALL_KEEPALIVE_INTERVAL` | 2 s |
+| `--keepalive-timeout` | `LIVERECALL_KEEPALIVE_TIMEOUT` | 5 s |
+
+- CLI overrides environment values. Startup prints effective settings.
+- `--naive` disables proactive degraded-mode selection; queue-full fallback remains.
+- `--experiment-send-delay-ms` adds artificial sender delay for experiments only,
+  defaults to zero, and does not model actual network impairment.
+- Queue caps exclude in-flight payloads, Python overhead and transport/kernel buffers.
+- `python solution_server.py --help` lists all supported options.
+
+## Delivery and recovery
+
+- Normal mode forwards accepted revisions. Per-client policy uses queue pressure
+  and send/queue age with separate entry/exit thresholds.
+- Overload handling may coalesce same-segment provisionals and drop lower-numbered
+  segments' provisionals. The latter assumes sequential source segments;
+  arbitrary interleaved active segments require additional validation.
+- Unresolved admission failure closes the client with 1013. Pong timeout can also
+  close it; this does not precisely measure displayed-caption lag.
+- Reconnect reports the last accepted final cursor. The server queues missing
+  recent finals, then current provisional snapshots, before live updates.
+- History is bounded to 90 s/5,000 items. Recovery requests are capped at 60 s;
+  oversized HISTORY retains only newer context fitting its byte budget.
+- Browser caption state/cursor are page-local; refresh resets them. sessionStorage
+  currently retains only the client ID. Normal recall reads local finals.
+
+## Tests and experiments
 
 ```bash
-python solution_server.py --port 8765 --queue-max-messages 512 --queue-max-bytes 2097152 --send-timeout 5 --close-timeout 2
-```
-
-- Queue limits must be positive integers; bytes count encoded payloads.
-- Timeouts are positive finite seconds and accept fractions.
-- Keepalive: `--keepalive-interval` (default 2 s) and `--keepalive-timeout`
-  (default 5 s) drop clients that fall behind. For a before/after comparison
-  with the unmodified `run_demo.py`, restore the library default:
-  `LIVERECALL_KEEPALIVE_INTERVAL=20 LIVERECALL_KEEPALIVE_TIMEOUT=20 python run_demo.py ...`
-- Priority: CLI argument > `LIVERECALL_*` environment variable > default.
-- Startup prints the settings actually used. See the
-  [configuration guide](docs/delivery/client_delivery.md#experiment-settings)
-  for defaults and unchanged-harness examples.
-
-## Tests
-
-```bash
-# Component and real WebSocket checks; install requirements.txt first
 python -m unittest discover -s tests -t . -v
 
-# Public run; uses the current server
-python run_demo.py --clients 20 --duration 20 --runs 3 --output-stem t1
+# Official T3: three independent slow-reader runs
+python run_demo.py --clients 100 --duration 60 --runs 3 \
+  --slow-percent 10 --slow-ms 500 --output-stem t3
 ```
 
-- Component tests use controlled peers; server tests also use loopback WebSockets.
-- Neither replaces the required Ubuntu networking benchmarks.
-- Run mandatory public experiments in Ubuntu: [PUBLIC_TESTS.md](PUBLIC_TESTS.md).
-- See the [delivery test plan](docs/delivery/delivery_test_plan.md) for remaining checks.
+Use `-t .` so test packages do not shadow application packages. The tested
+`6dbd7da` snapshot passed 131 tests on Ubuntu. These tests do not replace
+public networking measurements or browser validation.
 
-## Documentation
+- [PUBLIC_TESTS.md](PUBLIC_TESTS.md): T1–T5 commands and repetition.
+- [tests/README.md](tests/README.md): test groups and scope.
+- [3 November evidence](experiments/delivery_20261103/README.md): immutable versions,
+  raw outputs, RSS traces, plots, methods and limitations.
 
-- [Project checklist](docs/project_checklist.md): spec requirements and status.
-- [Delivery guide](docs/delivery/client_delivery.md): modules, lifecycle and monitoring.
-- [Report draft](docs/delivery/buffering_report_draft.md): design and evidence gaps.
-- [Submission drafts](docs/delivery/delivery_submission_drafts.md): AI usage and contributions.
+T3 before/after evidence shows 100% normal-client coverage/completeness, with slow
+final completeness improving from 51.32% to 100% at the cutoff. Slow freshness
+remains poor and reconnect events are nonzero. RSS increased during the five-minute
+observation; no leak-free or long-term memory-bound claim is made.
 
-The assignment handout PDF is excluded from Git. The team's final `report.pdf`
-is still required.
+T1, T2, T4 and T5 also have three recorded runs each. All reached 100% final
+completeness. Under T5 delay/loss, P99 live age was 1002.58 ms and freshness 89.12%.
+T5 used an isolated network namespace; the host loopback qdisc remained unchanged.
+
+## Submission documents
+
+- [Report PDF](report.pdf): current draft snapshot; update it as the team refines the report.
+- [Shared report](https://docs.google.com/document/d/12Bg3ZvpDkxkNV6cptI7mkXdj6YwLh6GLxcDzwSs-w_4): editable report; re-export `report.pdf` after changes.
+- [AI_USAGE.md](AI_USAGE.md): documented AI assistance and a corrected design example.
+- [CONTRIBUTIONS.md](CONTRIBUTIONS.md): responsibilities; percentages need team agreement.
+- [Project checklist](docs/project_checklist.md): functionality and deliverables.
+- [Delivery guide](docs/delivery/client_delivery.md): interfaces and lifecycle.
+
+The final submission also requires the separate 5–7 minute demo video. The report
+must be 4–5 pages excluding references/appendices. Run `python submission_check.py --final`
+once the final documents exist. The handout is excluded from Git; `report.pdf`
+remains trackable.

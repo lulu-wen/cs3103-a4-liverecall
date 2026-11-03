@@ -1,0 +1,628 @@
+{
+  "current_t3": {
+    "commit": "6dbd7da",
+    "run_count": 3,
+    "command": [
+      "/home/lulumi/cs3103-a4-test-xCtjouWF/.venv/bin/python",
+      "-u",
+      "run_demo.py",
+      "--clients",
+      "100",
+      "--duration",
+      "60",
+      "--runs",
+      "3",
+      "--slow-percent",
+      "10",
+      "--slow-ms",
+      "500",
+      "--port",
+      "47167",
+      "--output-stem",
+      "/home/lulumi/cs3103-a4-evidence-20261103-yqymKs/evidence/current_t3",
+      "--quiet-server"
+    ],
+    "expected_segments": 76,
+    "normal": {
+      "p50_ms": {
+        "median": 2.858,
+        "min": 2.715,
+        "max": 2.885
+      },
+      "p95_ms": {
+        "median": 4.4271499999999975,
+        "min": 3.7,
+        "max": 5.496049999999999
+      },
+      "p99_ms": {
+        "median": 5.910810000000001,
+        "min": 4.106430000000004,
+        "max": 6.177810000000001
+      },
+      "fresh_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "fresh_final_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "live_update_coverage_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "connections": {
+        "median": 90,
+        "min": 90,
+        "max": 90
+      },
+      "connection_errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "recovered_items": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "slow": {
+      "p50_ms": {
+        "median": 6960.796,
+        "min": 6953.594999999999,
+        "max": 6961.901
+      },
+      "p95_ms": {
+        "median": 13356.4316,
+        "min": 13353.4558,
+        "max": 13357.64715
+      },
+      "p99_ms": {
+        "median": 13805.84523,
+        "min": 13801.57294,
+        "max": 13808.17894
+      },
+      "fresh_pct": {
+        "median": 2.6548672566371683,
+        "min": 2.6548672566371683,
+        "max": 2.6548672566371683
+      },
+      "fresh_final_pct": {
+        "median": 1.3157894736842106,
+        "min": 1.3157894736842106,
+        "max": 1.3157894736842106
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "live_update_coverage_pct": {
+        "median": 49.56140350877193,
+        "min": 49.56140350877193,
+        "max": 49.56140350877193
+      },
+      "connections": {
+        "median": 30,
+        "min": 30,
+        "max": 30
+      },
+      "connection_errors": {
+        "median": 20,
+        "min": 20,
+        "max": 20
+      },
+      "recovered_items": {
+        "median": 380,
+        "min": 380,
+        "max": 380
+      }
+    },
+    "public": {
+      "duplicates": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "stale": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "invalid_history_nonfinal": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "connections": {
+        "median": 120,
+        "min": 120,
+        "max": 120
+      },
+      "connection_errors": {
+        "median": 20,
+        "min": 20,
+        "max": 20
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "recovered_history_items": {
+        "median": 380,
+        "min": 380,
+        "max": 380
+      },
+      "p50_ms": {
+        "median": 2.918,
+        "min": 2.782,
+        "max": 2.962
+      },
+      "p95_ms": {
+        "median": 657.2755999999999,
+        "min": 646.4245999999999,
+        "max": 658.26715
+      },
+      "p99_ms": {
+        "median": 11256.354669999999,
+        "min": 11253.390669999999,
+        "max": 11257.17165
+      },
+      "fresh_pct": {
+        "median": 94.91916859122402,
+        "min": 94.91916859122402,
+        "max": 94.91916859122402
+      },
+      "fresh_final_pct": {
+        "median": 90.13157894736842,
+        "min": 90.13157894736842,
+        "max": 90.13157894736842
+      },
+      "recovery_p50_ms": {
+        "median": 1.2185000000000001,
+        "min": 1.0514999999999999,
+        "max": 1.2335
+      },
+      "recovery_p95_ms": {
+        "median": 1.59235,
+        "min": 1.4036,
+        "max": 2.4208
+      }
+    },
+    "rss": {
+      "server_processes": 3,
+      "peak_mib_by_run": [
+        33.3789,
+        33.3984,
+        33.418
+      ],
+      "samples": 362
+    }
+  },
+  "before_t3": {
+    "commit": "acef9a301432cea5936c1303ce1799b8905d904a",
+    "run_count": 3,
+    "command": [
+      "/home/lulumi/cs3103-a4-test-xCtjouWF/.venv/bin/python",
+      "-u",
+      "run_demo.py",
+      "--clients",
+      "100",
+      "--duration",
+      "60",
+      "--runs",
+      "3",
+      "--slow-percent",
+      "10",
+      "--slow-ms",
+      "500",
+      "--port",
+      "60077",
+      "--output-stem",
+      "/home/lulumi/cs3103-a4-evidence-20261103-yqymKs/evidence/before_t3",
+      "--quiet-server"
+    ],
+    "expected_segments": 76,
+    "normal": {
+      "p50_ms": {
+        "median": 2.927,
+        "min": 2.612,
+        "max": 3.394
+      },
+      "p95_ms": {
+        "median": 5.518099999999999,
+        "min": 3.699,
+        "max": 5.656
+      },
+      "p99_ms": {
+        "median": 5.995810000000001,
+        "min": 4.398240000000005,
+        "max": 6.057620000000003
+      },
+      "fresh_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "fresh_final_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "live_update_coverage_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "connections": {
+        "median": 90,
+        "min": 90,
+        "max": 90
+      },
+      "connection_errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "recovered_items": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "slow": {
+      "p50_ms": {
+        "median": 14712.053,
+        "min": 14709.555,
+        "max": 14715.042000000001
+      },
+      "p95_ms": {
+        "median": 28076.5009,
+        "min": 28050.404000000002,
+        "max": 28082.58775
+      },
+      "p99_ms": {
+        "median": 29127.81194,
+        "min": 29122.4363,
+        "max": 29135.61304
+      },
+      "fresh_pct": {
+        "median": 1.694915254237288,
+        "min": 1.694915254237288,
+        "max": 1.694915254237288
+      },
+      "fresh_final_pct": {
+        "median": 0.0,
+        "min": 0.0,
+        "max": 0.0
+      },
+      "final_completeness_pct": {
+        "median": 51.31578947368421,
+        "min": 51.31578947368421,
+        "max": 51.31578947368421
+      },
+      "live_update_coverage_pct": {
+        "median": 51.75438596491228,
+        "min": 51.75438596491228,
+        "max": 51.75438596491228
+      },
+      "connections": {
+        "median": 10,
+        "min": 10,
+        "max": 10
+      },
+      "connection_errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "recovered_items": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "public": {
+      "duplicates": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "stale": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "invalid_history_nonfinal": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "connections": {
+        "median": 100,
+        "min": 100,
+        "max": 100
+      },
+      "connection_errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "final_completeness_pct": {
+        "median": 95.13157894736842,
+        "min": 95.13157894736842,
+        "max": 95.13157894736842
+      },
+      "recovered_history_items": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "p50_ms": {
+        "median": 3.0105,
+        "min": 2.676,
+        "max": 3.5115
+      },
+      "p95_ms": {
+        "median": 2251.6195999999927,
+        "min": 2249.9416499999998,
+        "max": 2255.3897500000003
+      },
+      "p99_ms": {
+        "median": 24023.88015,
+        "min": 23996.78232,
+        "max": 24030.509289999998
+      },
+      "fresh_pct": {
+        "median": 94.65437788018433,
+        "min": 94.65437788018433,
+        "max": 94.65437788018433
+      },
+      "fresh_final_pct": {
+        "median": 90.0,
+        "min": 90.0,
+        "max": 90.0
+      },
+      "recovery_p50_ms": null,
+      "recovery_p95_ms": null
+    },
+    "rss": {
+      "server_processes": 3,
+      "peak_mib_by_run": [
+        31.9492,
+        31.9922,
+        31.9336
+      ],
+      "samples": 422
+    }
+  },
+  "current_long": {
+    "commit": "6dbd7da",
+    "run_count": 1,
+    "command": [
+      "/home/lulumi/cs3103-a4-test-xCtjouWF/.venv/bin/python",
+      "-u",
+      "run_demo.py",
+      "--clients",
+      "100",
+      "--duration",
+      "300",
+      "--runs",
+      "1",
+      "--slow-percent",
+      "10",
+      "--slow-ms",
+      "500",
+      "--port",
+      "39947",
+      "--output-stem",
+      "/home/lulumi/cs3103-a4-evidence-20261103-yqymKs/evidence/current_long",
+      "--quiet-server"
+    ],
+    "expected_segments": 396,
+    "normal": {
+      "p50_ms": {
+        "median": 3.245,
+        "min": 3.245,
+        "max": 3.245
+      },
+      "p95_ms": {
+        "median": 5.89,
+        "min": 5.89,
+        "max": 5.89
+      },
+      "p99_ms": {
+        "median": 6.359,
+        "min": 6.359,
+        "max": 6.359
+      },
+      "fresh_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "fresh_final_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "live_update_coverage_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "connections": {
+        "median": 90,
+        "min": 90,
+        "max": 90
+      },
+      "connection_errors": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "recovered_items": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      }
+    },
+    "slow": {
+      "p50_ms": {
+        "median": 7530.886,
+        "min": 7530.886,
+        "max": 7530.886
+      },
+      "p95_ms": {
+        "median": 15803.096000000001,
+        "min": 15803.096000000001,
+        "max": 15803.096000000001
+      },
+      "p99_ms": {
+        "median": 18795.741560000002,
+        "min": 18795.741560000002,
+        "max": 18795.741560000002
+      },
+      "fresh_pct": {
+        "median": 1.7301038062283738,
+        "min": 1.7301038062283738,
+        "max": 1.7301038062283738
+      },
+      "fresh_final_pct": {
+        "median": 2.0202020202020203,
+        "min": 2.0202020202020203,
+        "max": 2.0202020202020203
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "live_update_coverage_pct": {
+        "median": 48.65319865319865,
+        "min": 48.65319865319865,
+        "max": 48.65319865319865
+      },
+      "connections": {
+        "median": 110,
+        "min": 110,
+        "max": 110
+      },
+      "connection_errors": {
+        "median": 100,
+        "min": 100,
+        "max": 100
+      },
+      "recovered_items": {
+        "median": 2060,
+        "min": 2060,
+        "max": 2060
+      }
+    },
+    "public": {
+      "duplicates": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "stale": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "invalid_history_nonfinal": {
+        "median": 0,
+        "min": 0,
+        "max": 0
+      },
+      "connections": {
+        "median": 200,
+        "min": 200,
+        "max": 200
+      },
+      "connection_errors": {
+        "median": 100,
+        "min": 100,
+        "max": 100
+      },
+      "final_completeness_pct": {
+        "median": 100.0,
+        "min": 100.0,
+        "max": 100.0
+      },
+      "recovered_history_items": {
+        "median": 2060,
+        "min": 2060,
+        "max": 2060
+      },
+      "p50_ms": {
+        "median": 3.334,
+        "min": 3.334,
+        "max": 3.334
+      },
+      "p95_ms": {
+        "median": 658.4697000000001,
+        "min": 658.4697000000001,
+        "max": 658.4697000000001
+      },
+      "p99_ms": {
+        "median": 11926.01716,
+        "min": 11926.01716,
+        "max": 11926.01716
+      },
+      "fresh_pct": {
+        "median": 94.9600709849157,
+        "min": 94.9600709849157,
+        "max": 94.9600709849157
+      },
+      "fresh_final_pct": {
+        "median": 90.20202020202021,
+        "min": 90.20202020202021,
+        "max": 90.20202020202021
+      },
+      "recovery_p50_ms": {
+        "median": 2.0945,
+        "min": 2.0945,
+        "max": 2.0945
+      },
+      "recovery_p95_ms": {
+        "median": 3.2495,
+        "min": 3.2495,
+        "max": 3.2495
+      }
+    },
+    "rss": {
+      "server_processes": 1,
+      "peak_mib_by_run": [
+        36.6523
+      ],
+      "samples": 600,
+      "duration_seconds": 299.856,
+      "early_10_30s_median_mib": 32.1523,
+      "last_30s_median_mib": 36.6523,
+      "after_60s_slope_mib_per_minute": 0.7601216503378435,
+      "after_60s_min_mib": 33.4336,
+      "after_60s_max_mib": 36.6523
+    }
+  }
+}

@@ -1,54 +1,36 @@
-# Report draft: buffering and slow-client isolation
+# Buffering and isolation: report contribution
 
-Notes for the shared report. Delivery and initial recovery are wired together;
-semantic overload handling and final-version performance evidence remain pending.
+The complete English text, setup, measured table and plots are in
+[the report draft](../../report.pdf).
+The [evidence index](../../experiments/delivery_20261103/README.md) retains
+commands, source hashes, raw results and plotting scripts.
 
-## Design
+## Implementation
 
-- One bounded FIFO and one sender task per client.
-- The producer enqueues without waiting for network writes.
-- Each sender sends accepted messages in FIFO order and yields between sends.
-- Tasks share one asyncio event loop; no OS thread is created per client.
-- Before registration, queue finalized HISTORY then current provisional snapshots
-  without yielding. Reject the whole initial context if any admission fails.
+- Each connection owns a bounded FIFO, one sender and a supervised session.
+- Producers enqueue without awaiting socket writes; a slow sender cannot hold
+  up normal clients' sends.
+- Defaults: 256 queued messages/1 MiB payload, 10 s send and 3 s close deadlines.
+- Cleanup unregisters the connection, clears pending data and awaits child tasks.
+- Recovery queues finals then latest provisional snapshots before registration.
+- [Overload handling](overload_summary.md) uses hysteresis and semantic dropping;
+  unresolved overload disconnects the client for retained-history recovery.
 
-## Limits and trade-offs
+## Measured findings
 
-- Admission checks message count and encoded payload bytes.
-- A full queue rejects new data without silently evicting old messages.
-- The current server unregisters and closes that client with code 1013. This
-  temporary fallback cannot guarantee final delivery without semantic recovery.
-- Rejection is not delivery: overload handling must preserve finals and the
-  latest useful active state, using recovery where appropriate.
-- Limits exclude object overhead, the current send, transport and OS buffers.
-- Send/close deadlines default to 10/3 seconds. These are design choices awaiting
-  overload-policy review, not measured optimal values.
-- Queue limits and deadlines can be set by CLI/env; startup logs the effective
-  settings so experiment configurations can be recorded without editing code.
-- Initial messages respect the client's 1 MiB receive limit. HISTORY still keeps
-  only the newest context fitting its budget; complete oversized recovery remains
-  a limitation rather than a final-delivery guarantee.
+- Ubuntu `6dbd7da`: 131 unit tests passed; T1–T5 each ran three times.
+- T3 normal clients: 100% live coverage and final completeness in both snapshots.
+- Slow P95 live age: 28.08 s before → 13.36 s current; final completeness:
+  51.32% → 100% at the cutoff.
+- Current T3 still has 20 connection-error events and 380 recovered history items
+  per run. Slow fresh-final ratio is only 1.32%; recovery is not real-time delivery.
+- Current T3 RSS peaks: 33.38–33.42 MiB. The separate 300 s observation rises
+  approximately 0.76 MiB/min after 60 s; it does not establish a plateau.
 
-## Cleanup and monitoring
+## Limits
 
-- Session exit removes the registry entry, clears the queue, cancels/awaits tasks
-  and attempts socket close. Cleanup tolerates repeated cancellation.
-- Uncertain sends are not retried locally; recovery handles resume/deduplication.
-- Snapshots expose queue load, in-flight age, local send counts and transport size.
-- Local send completion is not browser acknowledgement or caption completeness.
-
-## Evidence and remaining work
-
-- All 110 local tests passed on 31 October 2026, including twelve new recovery
-  initialization tests through real loopback WebSockets.
-- Three controlled-peer tests cover coalescing with an in-flight send, normal
-  revision delivery and preservation of the backlog after rejected replacement.
-- With 100 controlled peers and ten blocked sends, normal senders continue;
-  slow queues reject at their limits and accepted data drains in order later.
-- Tests check registry/task cleanup and isolation of a failed session.
-- A local 20-client smoke check delivered 80/80 finals and 240/240 revisions;
-  this single short Windows run is not a formal public performance result.
-- Re-run Ubuntu tests, RSS observations and baseline comparison on the completed
-  implementation before making final performance claims.
-
-Use the [experiment plan](delivery_test_plan.md) to collect missing evidence.
+- Before/after changes whole default versions, so it does not isolate coalescing.
+- Lower-segment dropping assumes sequential input, not arbitrary interleaving.
+- Oversized history may omit older finals; complete chunked recovery is absent.
+- RSS excludes clients and kernel buffers; bounded queues do not prove bounded
+  long-term total memory.

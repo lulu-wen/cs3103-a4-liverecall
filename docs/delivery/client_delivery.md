@@ -2,7 +2,7 @@
 
 Each client has its own queue and sender. A slow send can wait without blocking
 other senders. `solution_server.py` uses them together with caption revision
-state and recovery. Semantic overload handling remains incomplete.
+state, recovery and a per-client overload policy.
 
 ## Modules
 
@@ -17,11 +17,11 @@ state and recovery. Semantic overload handling remains incomplete.
 
 | Spec | Support and remaining work |
 | --- | --- |
-| Section 3, #9: Concurrent clients | Separate queues/tasks; local WebSocket checks pass; Ubuntu scale tests pending |
-| Section 3, #10: Slow-client isolation | Integrated bounded queues and independent sends; Ubuntu stress tests pending |
-| Section 3, #11 and section 4.3: Graceful overload | Admission results and monitoring; semantic overload policy pending |
-| Section 8, T3: Slow clients | Local tests ready; Ubuntu measurements pending |
-| Section 10: Boundedness | Queue limits and cleanup; total memory needs measurement |
+| Section 3, #9: Concurrent clients | Separate queues/tasks; public T2 measured on Ubuntu |
+| Section 3, #10: Slow-client isolation | Public T3 normal clients retained full coverage/completeness |
+| Section 3, #11 and section 4.3: Graceful overload | Pressure-based degraded mode, semantic dropping and bounded eviction |
+| Section 8, T3: Slow clients | Three runs per version; slow-client freshness remains poor |
+| Section 10: Boundedness | Queue limits and cleanup; five-minute RSS rises, so no plateau claim |
 
 Server recovery history (section 3, #8) is separate from outgoing queues.
 
@@ -31,14 +31,15 @@ Current server wiring:
 
 - `CLIENTS` maps sockets to queues; `MONITORS` holds each connection's monitor.
 - `broadcast_to_queues()` calls `push_caption()` without waiting on socket writes.
-  Normal admission preserves every revision. FULL retries once with coalescing;
-  other failures do not trigger a replacement attempt.
+  NORMAL admission preserves revisions; DEGRADED admission enables coalescing
+  and older-segment dropping. FULL retries once with both flags enabled.
 - `get_client_stats(ws)` returns an active client's monitoring snapshot.
 - HISTORY and the latest active provisional updates are queued before registration.
-- Default queue caps: 256 messages and 1 MiB of encoded payloads, both provisional.
+- Default queue caps: 256 messages and 1 MiB of encoded payloads per connection.
 - Unresolved admission failure unregisters the client and starts one tracked close task
   (code 1013). The handler awaits/removes that task and its monitor on exit.
-- This is a temporary fail-fast fallback, not final-preserving overload handling.
+- Recovery can restore retained finals after eviction; capacity/retention limits
+  prevent a universal final-delivery guarantee.
 
 ## Caption coalescing API
 
@@ -48,7 +49,7 @@ validated caption metadata:
 ```python
 result = queue.push_caption(
     event.raw, segment=event.segment, revision=event.revision,
-    final=event.final, coalesce=degraded,
+    final=event.final, coalesce=degraded, drop_older_segments=degraded,
 )
 ```
 
@@ -56,12 +57,15 @@ result = queue.push_caption(
 - With `coalesce=False` (default), every revision is queued normally.
 - With `coalesce=True`, admission replaces queued older provisional revisions
   of the same segment, appending the new update after the remaining messages.
-- Finals, HISTORY, other segments and in-flight sends are untouched.
+- With `drop_older_segments=True`, provisionals of lower-numbered segments are
+  also candidates. This assumes sequential source segments and can remove an
+  interleaved segment's latest provisional. Finals, opaque HISTORY and in-flight
+  sends are never coalesced.
 - If admission still fails, the entire old backlog stays unchanged. Handle the
   result explicitly; coalescing does not guarantee final delivery or recovery.
 - Metadata must match the payload and come from validated caption state.
-- Current live broadcasts use this API and enable coalescing on a FULL retry.
-  Lag-based degraded-mode transitions remain pending. Initial context still uses
+- Current live broadcasts enable these flags in degraded mode or on a FULL retry.
+  Initial context still uses
   `push()`, so these opaque initial messages are not replacement candidates.
 - A coalescing push scans the bounded queue; normal pushes remain constant-time
   apart from UTF-8 byte counting.
@@ -86,7 +90,7 @@ HISTORY (finals only) -> latest active provisional updates -> later live updates
 - There is no await from context selection through successful registration;
   source updates cannot interleave and create a history-to-live gap.
 - This does not guarantee all missed finals when history exceeds the byte budget;
-  semantic overload/recovery policy still needs to address that case.
+  complete oversized recovery remains a limitation.
 
 ## Lifecycle rules
 

@@ -1,0 +1,18 @@
+﻿flowchart LR
+  SOURCE[Caption source] --> STATE[Revision state: newer revisions and final lock]
+  subgraph SERVER[Server: one asyncio event loop]
+    STATE -->|finals| HISTORY[Bounded final history]
+    STATE --> POLICY[Broadcast and per-client overload policy]
+    STATE -. active snapshot .-> JOIN[Client handler]
+    HISTORY -. recovery .-> JOIN
+    subgraph SESSIONS[Independent client sessions: cleanup and monitoring]
+      Q1[Queue 1: 256 messages / 1 MiB] --> TX1[Sender task 1]
+      QN[Queue N: 256 messages / 1 MiB] --> TXN[Sender task N]
+    end
+    POLICY --> Q1
+    POLICY --> QN
+    JOIN -. initial batch .-> SESSIONS
+  end
+  TX1 --> BROWSER[Each browser: revision checks, live view and final recall]
+  TXN --> BROWSER
+  BROWSER -. HELLO and final cursor .-> JOIN
